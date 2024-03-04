@@ -10,7 +10,19 @@ payload = {
 
 headers = {'Content-Type': 'application/json'}
 
-response = requests.post(url, json=payload, headers=headers)
+while True:
+    response = requests.post(url, json=payload, headers=headers)
 
-print(response.text)
+    if response.status_code == 200:
+        response_data = response.json()
+        print(response_data['data']['message'])
+
+        break
+
+    elif (response.status_code == 400):
+        response_data = response.json()
+        print("Error:" response_data['data']['message'])
+
+
+
 
