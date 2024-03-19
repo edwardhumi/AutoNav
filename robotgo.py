@@ -15,6 +15,11 @@ import scipy.stats
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 20
+proximity_limit = 0.5
+
+
+#creating target as an empty list first
+target = []
 
 #class for the nodes
 class Pos:
@@ -34,6 +39,7 @@ class Pos:
         return lst
     def val(self,Map):
         return Map[self.pos[0],self.pos[1]]
+    
 def mean(lst):
     count = 0
     total = 0
@@ -41,6 +47,16 @@ def mean(lst):
         count += 1
         total += i
     return total/count
+
+def sortpos(arr,x,y):
+    distancedic = {}
+    for i in arr:
+        distancedic[(i[0] - x)**2 + (i[1]-y)**2] = i
+    keys = sorted(list(distancedic.keys()))
+    ans =[]
+    for i in keys:
+        ans.append(distancedic[i])
+    return ans
 
 def findfronteirs(tmap,posi):
     frontiers = []
@@ -64,6 +80,10 @@ def findfronteirs(tmap,posi):
                 a = temp[:,pos.pos[1]-1:pos.pos[1]+2]
             return np.any(a==1)
         return False
+    
+        
+    
+    
 
     #Defining basic parameters
     qm = []
@@ -199,20 +219,22 @@ class Occupy(Node):
         for i in frontier_positions:
             midpoint_positions.append([round(mean([x[0] for x in i])),round(mean(x[1] for x in i))])
         print(midpoint_positions)
+        midpoint_positions = sortpos(midpoint_positions,grid_x,grid_y)
         
-        #Min = abs(midpoint_positions[0][0]) + abs(midpoint_positions[0][1])
-        #tem = 0
-        #for i in range(len(midpoint_positions)):
-        #    if abs(midpoint_positions[0][0]) + abs(midpoint_positions[0][1]) < Min:
-        #        Min = abs(midpoint_positions[0][0]) + abs(midpoint_positions[0][1]) < Min
-        #        tem = i
-        
-        #for i in range(-3,3):
-        #    for j in range(-3,3):
-        #        odata[midpoint_positions[tem][0]+i,midpoint_positions[tem][1]+j] = 0
-
-
-
+        #global target
+        #if target:
+        #    print(abs(target[0]-cur_pos.x) + abs(target[1]-cur_pos.y))
+        #if not target or abs(target[0]-cur_pos.x) + abs(target[1]-cur_pos.y) < proximity_limit:
+        #    if midpoint_positions:
+        #        target = [x*map_res for x in midpoint_positions[0]]
+        #if target:
+        #    target_grid = [round(target[0]/map_res),round(target[1]/map_res)]
+        #else:
+        #    target_grid = []
+        #if target_grid:
+        #    for i in range(-3,3):
+        #        for j in range(-3,3):
+        #            odata[target_grid[0]+i,target_grid[1]+j] = 0
                     
         # create image from 2D array using PIL
         img = Image.fromarray(odata)
