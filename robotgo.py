@@ -22,31 +22,10 @@ proximity_limit = 0.5
 target = []
 
 #class for the nodes
-class Pos:
-    def __init__(self,pos):
-        self.pos = pos
-        self.mark = "unmarked"
-    def adj(self,Map,dick):
-        lst = []
-        for i in range(-1,min(2,len(Map)-self.pos[0])):
-            for j in range(-1,min(2,len(Map[0])-self.pos[1])):
-                if (i == 0 and j ==0) or self.pos[0]+i < 0 or self.pos[1]+j < 0:
-                    continue
-                if (self.pos[0]+i,self.pos[1]+j) not in dick:
-                    dick[(self.pos[0]+i,self.pos[1]+j)] = Pos((self.pos[0]+i,self.pos[1]+j))
-                lst.append((self.pos[0]+i,self.pos[1]+j))
-                
-        return lst
-    def val(self,Map):
-        return Map[self.pos[0],self.pos[1]]
-    
-def mean(lst):
-    count = 0
-    total = 0
-    for i in lst:
-        count += 1
-        total += i
-    return total/count
+
+def median(arr):
+    ind = round(len(arr)/2)
+    return arr[ind]
 
 def sortpos(arr,x,y):
     distancedic = {}
@@ -60,26 +39,39 @@ def sortpos(arr,x,y):
 
 def findfronteirs(tmap,posi):
     frontiers = []
-    dick ={}
+    markmap ={}
 
     #Function to check if a position is a fronteir or not
     def isFronteir(pos):
-        if pos.val(tmap) == 2:
-            if pos.pos[0] ==0:
+        if tmap[pos[0],pos[1]]   == 2:
+            if pos[0] ==0:
                 temp = tmap[:2,:]
-            elif pos.pos[0] == len(tmap)-1:
-                temp = tmap[pos.pos[0]-1:,:]
+            elif pos[0] == len(tmap)-1:
+                temp = tmap[pos[0]-1:,:]
             else:
-                temp = tmap[pos.pos[0]-1:pos.pos[0]+2,:]
+                temp = tmap[pos[0]-1:pos[0]+2,:]
 
-            if pos.pos[1] == 0:
+            if pos[1] == 0:
                 a = temp[:,:2]
-            elif pos.pos[1] == len(tmap[0])-1:
-                a = temp[:,pos.pos[1]-1:]
+            elif pos[1] == len(tmap[0])-1:
+                a = temp[:,pos[1]-1:]
             else:
-                a = temp[:,pos.pos[1]-1:pos.pos[1]+2]
+                a = temp[:,pos[1]-1:pos[1]+2]
             return np.any(a==1)
         return False
+    
+    def mark(p):
+        return markmap.get(p,'Unmarked')
+    
+    def adj(p):
+        ans = []
+        for i in range(-1,2):
+            for j in range(-1,2):
+                if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(tmap[0]) -1 or p[0]+i > len(tmap) -1:
+                    continue
+                ans.append((p[0]+i,p[1]+j))
+        return ans
+                
     
         
     
@@ -88,44 +80,45 @@ def findfronteirs(tmap,posi):
     #Defining basic parameters
     qm = []
     qm.append(posi)
-    dick[qm[0]] = Pos(posi)
-    dick[qm[0]].mark = "Map-Open-List"
+    markmap[posi] = "Map-Open-List"
        
 
     while qm:
         p = qm.pop(0)
 
-        if dick[p].mark == 'Map-Close-List':
+        if mark(p) == 'Map-Close-List':
             continue
         
-        if isFronteir(dick[p]):
+        if isFronteir(p):
             qf = []
             nf = []
             qf.append(p)
-            dick[p].mark = "Frontier-Open-List"
+            markmap[p] = "Frontier-Open-List"
 
             while qf:
                 q = qf.pop(0)
-                if dick[q].mark in ["Map-Close-List","Frontier-Close-List"]:
+                if mark(q) in ["Map-Close-List","Frontier-Close-List"]:
                     continue
-                if isFronteir(dick[q]):
+                if isFronteir(q):
+                    print("ADI")
                     nf.append(q)
-                    for w in dick[q].adj(tmap,dick):
-                        if dick[w].mark not in ["Frontier-Open-List",'Frontier-Close-List','Map-Close-List']:
+                    for w in adj(q):
+                        if mark(w) not in ["Frontier-Open-List",'Frontier-Close-List','Map-Close-List']:
+                            print("ADD")
                             qf.append(w)
-                            dick[w].mark = "Frontier-Open-List"
-                dick[q].mark = 'Frontier-Close-List'
+                            markmap[w] = "Frontier-Open-List"
+                markmap[q] = 'Frontier-Close-List'
             if len(nf) > threshold:
                 frontiers.append(nf)
             for i in nf:
-                dick[i].mark = "Map-Close-List"
+                markmap[i] = "Map-Close-List"
                 
-        for v in dick[p].adj(tmap,dick):
-            if dick[v].mark not in ["Map-Open-List","Map-Close-List"]:
-                if any([dick[x].val(tmap) == 2 for x in dick[v].adj(tmap,dick)]):
+        for v in adj(p):
+            if mark(v) not in ["Map-Open-List","Map-Close-List"]:
+                if any([tmap[x[0],x[1]]== 2 for x in adj(v)]):
                        qm.append(v)
-                       dick[v].mark = "Map-Open-List"
-        dick[p].mark = "Map-Close-List"
+                       markmap[v] = "Map-Open-List"
+        markmap[p] = "Map-Close-List"
     return frontiers
     
 
@@ -217,7 +210,7 @@ class Occupy(Node):
         frontier_positions =findfronteirs(odata,(grid_x,grid_y))
         midpoint_positions = []
         for i in frontier_positions:
-            midpoint_positions.append([round(mean([x[0] for x in i])),round(mean(x[1] for x in i))])
+            midpoint_positions.append(median(i))
         print(midpoint_positions)
         midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
         
