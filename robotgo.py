@@ -219,22 +219,22 @@ class Occupy(Node):
         for i in frontier_positions:
             midpoint_positions.append([round(mean([x[0] for x in i])),round(mean(x[1] for x in i))])
         print(midpoint_positions)
-        midpoint_positions = sortpos(midpoint_positions,grid_x,grid_y)
+        midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
         
-        #global target
-        #if target:
-        #    print(abs(target[0]-cur_pos.x) + abs(target[1]-cur_pos.y))
-        #if not target or abs(target[0]-cur_pos.x) + abs(target[1]-cur_pos.y) < proximity_limit:
-        #    if midpoint_positions:
-        #        target = [x*map_res for x in midpoint_positions[0]]
-        #if target:
-        #    target_grid = [round(target[0]/map_res),round(target[1]/map_res)]
-        #else:
-        #    target_grid = []
-        #if target_grid:
-        #    for i in range(-3,3):
-        #        for j in range(-3,3):
-        #            odata[target_grid[0]+i,target_grid[1]+j] = 0
+        global target
+
+        if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
+            if midpoint_positions:
+                target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+        if target:
+            target_grid = [round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res)]
+        else:
+            target_grid = []
+        
+        if target_grid:
+            for i in range(-2,2):
+                for j in range(-2,2):
+                    odata[target_grid[0]+i,target_grid[1]+j] =0
                     
         # create image from 2D array using PIL
         img = Image.fromarray(odata)
