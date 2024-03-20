@@ -212,7 +212,9 @@ class Occupy(Node):
         # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
         # becomes -1.0, and vice versa
         while(c_change_dir * c_dir_diff > 0):
+            print(c_change_dir * c_dir_diff)
             if c_change_dir * c_dir_diff < 0.1:
+                print('cycle broken')
                 break
             # allow the callback functions to run
             rclpy.spin_once(self)
@@ -233,7 +235,6 @@ class Occupy(Node):
         self.publisher.publish(twist)
 
     def listener_callback(self, msg):
-        print("A")
         # create numpy array
         occdata = np.array(msg.data)
         # compute histogram to identify bins with -1, values between 0 and below 50, 
@@ -356,8 +357,10 @@ class Occupy(Node):
         target = self.target
         if target:
             print("target acquired")
-            angle = np.arctan((target[1]-self.y)/(target[0]-self.x))
-            self.rotatebot(angle-self.yaw)
+            angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
+            
+            if angle > 0.1:
+                self.rotatebot(angle)
             
             twist = Twist()
             twist.linear.x = 0.1
