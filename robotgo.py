@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Odometry
 import tf2_ros
 from tf2_ros import LookupException, ConnectivityException, ExtrapolationException
 import numpy as np
@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import math
 import scipy.stats
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+import cmath
 
 
 # constants
@@ -16,10 +19,11 @@ occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 20
 proximity_limit = 0.5
+rotatechange = 0.1
 
 
 #creating target as an empty list first
-target = []
+
 
 #class for the nodes
 
@@ -100,11 +104,9 @@ def findfronteirs(tmap,posi):
                 if mark(q) in ["Map-Close-List","Frontier-Close-List"]:
                     continue
                 if isFronteir(q):
-                    print("ADI")
                     nf.append(q)
                     for w in adj(q):
                         if mark(w) not in ["Frontier-Open-List",'Frontier-Close-List','Map-Close-List']:
-                            print("ADD")
                             qf.append(w)
                             markmap[w] = "Frontier-Open-List"
                 markmap[q] = 'Frontier-Close-List'
@@ -156,11 +158,82 @@ class Occupy(Node):
             'map',
             self.listener_callback,
             qos_profile_sensor_data)
+        self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.subscription  # prevent unused variable warning
         self.tfBuffer = tf2_ros.Buffer()
         self.tfListener = tf2_ros.TransformListener(self.tfBuffer, self)
+        self.roll = 0
+        self.pitch = 0
+        self.yaw = 0
+        self.x = 0
+        self.y = 0
+        self.target = []
+        
+    def stopbot(self):
+        self.get_logger().info('In stopbot')
+        # publish to cmd_vel to move TurtleBot
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+        # time.sleep(1)
+        self.publisher.publish(twist)
+        
+    def rotatebot(self, rot_angle):
+        # self.get_logger().info('In rotatebot')
+        # create Twist object
+        twist = Twist()
+        
+        # get current yaw angle
+        current_yaw = self.yaw
+        # log the info
+        self.get_logger().info('Current: %f' % math.degrees(current_yaw))
+        # we are going to use complex numbers to avoid problems when the angles go from
+        # 360 to 0, or from -180 to 180
+        c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
+        # calculate desired yaw
+        target_yaw = current_yaw + math.radians(rot_angle)
+        # convert to complex notation
+        c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
+        self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
+        # divide the two complex numbers to get the change in direction
+        c_change = c_target_yaw / c_yaw
+        # get the sign of the imaginary component to figure out which way we have to turn
+        c_change_dir = np.sign(c_change.imag)
+        # set linear speed to zero so the TurtleBot rotates on the spot
+        twist.linear.x = 0.0
+        # set the direction to rotate
+        twist.angular.z = c_change_dir * rotatechange
+        # start rotation
+        self.publisher.publish(twist)
+
+        # we will use the c_dir_diff variable to see if we can stop rotating
+        c_dir_diff = c_change_dir
+        # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+        # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
+        # becomes -1.0, and vice versa
+        while(c_change_dir * c_dir_diff > 0):
+            if c_change_dir * c_dir_diff < 0.1:
+                break
+            # allow the callback functions to run
+            rclpy.spin_once(self)
+            current_yaw = self.yaw
+            # convert the current yaw to complex form
+            c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
+            # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
+            # get difference in angle between current and target
+            c_change = c_target_yaw / c_yaw
+            # get the sign to see if we can stop
+            c_dir_diff = np.sign(c_change.imag)
+            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+
+        self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
+        # set the rotation speed to 0
+        twist.angular.z = 0.0
+        # stop the rotation
+        self.publisher.publish(twist)
 
     def listener_callback(self, msg):
+        print("A")
         # create numpy array
         occdata = np.array(msg.data)
         # compute histogram to identify bins with -1, values between 0 and below 50, 
@@ -186,8 +259,10 @@ class Occupy(Node):
         cur_pos = trans.transform.translation
         cur_rot = trans.transform.rotation
         self.get_logger().info('Trans: %f, %f' % (cur_pos.x, cur_pos.y))
+        self.x,self.y = cur_pos.x,cur_pos.y
         # convert quaternion to Euler angles
         roll, pitch, yaw = euler_from_quaternion(cur_rot.x, cur_rot.y, cur_rot.z, cur_rot.w)
+        self.roll,self.pitch,self.yaw = roll,pitch,yaw
         #self.get_logger().info('Rot-Yaw: R: %f D: %f' % (yaw, np.degrees(yaw)))
 
         # get map resolution
@@ -204,8 +279,9 @@ class Occupy(Node):
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
+        target = self.target
 
-
+        print(target)
         print("Frontier Positions")
         frontier_positions =findfronteirs(odata,(grid_x,grid_y))
         midpoint_positions = []
@@ -214,11 +290,11 @@ class Occupy(Node):
         print(midpoint_positions)
         midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
         
-        global target
+
 
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
             if midpoint_positions:
-                target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+                self.target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
         if target:
             target_grid = [round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res)]
         else:
@@ -275,7 +351,44 @@ class Occupy(Node):
         plt.draw_all()
         # pause to make sure the plot gets created
         plt.pause(0.00000000001)
-
+        
+    def movetotarget(self):
+        target = self.target
+        if target:
+            print("target acquired")
+            angle = np.arctan((target[1]-self.y)/(target[0]-self.x))
+            self.rotatebot(angle-self.yaw)
+            
+            twist = Twist()
+            twist.linear.x = 0.1
+            twist.angular.z = 0.0
+            # not sure if this is really necessary, but things seem to work more
+            # reliably with this
+            self.publisher.publish(twist)
+            print('Start moving')
+            twist = Twist()
+            twist.linear.x = 0.2
+            twist.angular.z = 0.0
+            # not sure if this is really necessary, but things seem to work more
+            # reliably with this
+            self.publisher.publish(twist)
+    def Move(self):
+        target = self.target
+        rclpy.spin_once(self)
+        print(target)
+        while (True):
+            rclpy.spin_once(self)
+            print(target)
+            try:
+                if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit:
+                    self.stopbot()
+                    self.movetotarget()
+            except:
+                print("eeror?")
+            
+            
+            
+            
 
 def main(args=None):
     rclpy.init(args=args)
@@ -283,10 +396,7 @@ def main(args=None):
     occupy = Occupy()
 
     # create matplotlib figure
-    plt.ion()
-    plt.show()
-
-    rclpy.spin(occupy)
+    occupy.Move()
 
     # Destroy the node explicitly
     # (optional - otherwise it will be done automatically
