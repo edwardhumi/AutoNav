@@ -186,6 +186,9 @@ class Occupy(Node):
             self.isCrashing = True
             print("NABRAAAKKKKKKKKKKKKKKKKKKKKKKKKKK")
             print(self.laser_range)
+            #newangle = np.radians(np.nanargmax(self.laser_range))
+            #dis = np.max(self.laser_range)
+            #self.target = [self.y + np.sin(newangle) * dis,self.x+np.cos(newangle) + dis * np.cos(newangle)]
         else:
             self.isCrashing = False
         
@@ -409,6 +412,7 @@ class Occupy(Node):
                     self.movetotarget()
             except:
                 print("eeror?")
+                self.target = []
 
 
 def main(args=None):
