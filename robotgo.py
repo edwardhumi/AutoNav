@@ -22,11 +22,6 @@ proximity_limit = 0.5
 rotatechange = 0.1
 
 
-#creating target as an empty list first
-
-
-#class for the nodes
-
 def median(arr):
     ind = round(len(arr)/2)
     return arr[ind]
@@ -75,17 +70,11 @@ def findfronteirs(tmap,posi):
                     continue
                 ans.append((p[0]+i,p[1]+j))
         return ans
-                
-    
-        
-    
-    
 
     #Defining basic parameters
     qm = []
     qm.append(posi)
     markmap[posi] = "Map-Open-List"
-       
 
     while qm:
         p = qm.pop(0)
@@ -150,14 +139,26 @@ def euler_from_quaternion(x, y, z, w):
 
 
 class Occupy(Node):
-
     def __init__(self):
         super().__init__('occupy')
+        
+        # create subscription to track occupancy
         self.subscription = self.create_subscription(
             OccupancyGrid,
             'map',
             self.listener_callback,
             qos_profile_sensor_data)
+        
+        # create subscription to track lidar
+        self.scan_subscription = self.create_subscription(
+            LaserScan,
+            'scan',
+            self.scan_callback,
+            qos_profile_sensor_data)
+        self.scan_subscription  # prevent unused variable warning
+        self.laser_range = np.array([])
+        
+        # create publisher for moving TurtleBot
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.subscription  # prevent unused variable warning
         self.tfBuffer = tf2_ros.Buffer()
@@ -168,6 +169,25 @@ class Occupy(Node):
         self.x = 0
         self.y = 0
         self.target = []
+        self.isCrashing = False
+        
+    def scan_callback(self, msg):
+        # self.get_logger().info('In scan_callback')
+        # create numpy array
+        self.laser_range = np.array(msg.ranges)
+        # replace 0's with nan
+        self.laser_range[self.laser_range==0] = np.nan
+        
+        stop_distance = 0.25
+        front_angle = 45
+        front_angles = range(-front_angle,front_angle+1,1)
+        lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
+        if(len(lri[0])>0):
+            self.isCrashing = True
+            print("NABRAAAKKKKKKKKKKKKKKKKKKKKKKKKKK")
+            print(self.laser_range)
+        else:
+            self.isCrashing = False
         
     def stopbot(self):
         self.get_logger().info('In stopbot')
@@ -212,7 +232,6 @@ class Occupy(Node):
         # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
         # becomes -1.0, and vice versa
         while(c_change_dir * c_dir_diff > 0):
-            print(c_change_dir * c_dir_diff)
             if c_change_dir * c_dir_diff < 0.1:
                 print('cycle broken')
                 break
@@ -284,14 +303,13 @@ class Occupy(Node):
 
         print(target)
         print("Frontier Positions")
-        frontier_positions =findfronteirs(odata,(grid_x,grid_y))
+        frontier_positions = findfronteirs(odata,(grid_x,grid_y))
         midpoint_positions = []
         for i in frontier_positions:
             midpoint_positions.append(median(i))
         print(midpoint_positions)
         midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
         
-
 
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
             if midpoint_positions:
@@ -304,7 +322,7 @@ class Occupy(Node):
         if target_grid:
             for i in range(-2,2):
                 for j in range(-2,2):
-                    odata[target_grid[0]+i,target_grid[1]+j] =0
+                    odata[target_grid[0]+i,target_grid[1]+j] = 0
                     
         # create image from 2D array using PIL
         img = Image.fromarray(odata)
@@ -358,23 +376,26 @@ class Occupy(Node):
         if target:
             print("target acquired")
             angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
+            if (target[1]-self.x) < 0:
+                if (target[0]-self.y) > 0:
+                    angle += np.pi
+                else:
+                    angle -= np.pi
             
             if angle > 0.1:
                 self.rotatebot(angle)
             
-            twist = Twist()
-            twist.linear.x = 0.1
-            twist.angular.z = 0.0
-            # not sure if this is really necessary, but things seem to work more
-            # reliably with this
-            self.publisher.publish(twist)
             print('Start moving')
             twist = Twist()
-            twist.linear.x = 0.2
+            if (self.isCrashing):
+                twist.linear.x = 0
+            else:
+                twist.linear.x = 0.1
             twist.angular.z = 0.0
             # not sure if this is really necessary, but things seem to work more
             # reliably with this
             self.publisher.publish(twist)
+            
     def Move(self):
         target = self.target
         rclpy.spin_once(self)
@@ -388,10 +409,7 @@ class Occupy(Node):
                     self.movetotarget()
             except:
                 print("eeror?")
-            
-            
-            
-            
+
 
 def main(args=None):
     rclpy.init(args=args)
