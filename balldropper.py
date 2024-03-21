@@ -248,7 +248,6 @@ class Scanner(Node):
         #off the servo
         #follow black line, forward, right, left, stop
         else:
-            twist = Twist()
             #forward
             if  ( 
                 ((s1==0)and(s2==0)and(s3==0)and(s4==1)and(s5==1)and(s6==0)and(s7==0)and(s8==0))or
@@ -299,7 +298,7 @@ class Scanner(Node):
 
             else:
                 mover = Mover()
-                mover.right()
+                mover.stop()
 
 
 def main(args=None):
@@ -320,5 +319,3 @@ def main(args=None):
 if name == 'main':
     main()
     
-
-
