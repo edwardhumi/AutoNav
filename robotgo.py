@@ -174,6 +174,8 @@ class Occupy(Node):
         self.target = []
         self.isCrashing = False
         self.crashAngle = 0
+        self.crashPos = [0,0]
+        self.solAngle = False
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -195,15 +197,19 @@ class Occupy(Node):
             if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)):
                 self.crashAngle = i
                 self.isCrashing = True
+                self.crashPos = [self.y,self.x]
                 print("CRASHHHH")
                 break
             elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)):
                 self.crashAngle = 360 - i
                 self.isCrashing = True
+                self.crashPos = [self.y,self.x]
                 print("CRASHHHH")
                 break
             else:
                 self.isCrashing = False
+                if abs(self.crashPos[0] - self.y) + abs(self.crashPos[1] - self.x) > 0.5:
+                    self.solAngle = False
         
         
     def stopbot(self):
@@ -216,7 +222,7 @@ class Occupy(Node):
         self.publisher.publish(twist)
         
     def rotatebot(self, rot_angle):
-        # self.get_logger().info('In rotatebot')
+        self.get_logger().info('In rotatebot')
         # create Twist object
         twist = Twist()
         
@@ -392,44 +398,49 @@ class Occupy(Node):
         if target:
             if (self.isCrashing):
                 # Handles crash avoidance
-                print("Avoiding crash")
+                print("Avoiding crash\n\n\n\n\n\n")
                 self.stopbot()
                 #closestAngle = np.nanargmin(self.laser_range)
                 closestAngle = self.crashAngle
                 print("closestAngle", closestAngle)
                 destinationAngle = closestAngle
                 #print(self.laser_range[0], self.laser_range[89], self.laser_range[179], self.laser_range[269])
-                for i in range (30):
-                    anglePos = closestAngle + i #search in counter clockwise direction
-                    angleNeg = closestAngle - i #search in clockwise direction
-                    # prevents index out of bound, keep both angles (0 - 359)
-                    if (anglePos > 359):
-                        anglePos -= 359
-                    if (angleNeg < 0):
-                        angleNeg += 360
+                if self.solAngle:
+                    print("Wreckingball\n\n\n\n\n\n\n\n")
+                    destinationAngle = self.solAngle
+                else:
+                    for i in range (30):
+                        anglePos = closestAngle + i #search in counter clockwise direction
+                        angleNeg = closestAngle - i #search in clockwise direction
+                        # prevents index out of bound, keep both angles (0 - 359)
+                        if (anglePos > 359):
+                            anglePos -= 359
+                        if (angleNeg < 0):
+                            angleNeg += 360
+                            
+                        # prioritize rotation towards target_angle when choosing anglePos/angleNeg
+                        target_angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
+                        if self.laser_range[anglePos] >= stop_distance + 0.2 and target_angle > 0:
+                            destinationAngle = anglePos + 5
+                            break
+                        if self.laser_range[angleNeg] >= stop_distance + 0.2 and target_angle <= 0:
+                            destinationAngle = angleNeg - 5
+                            break
                         
-                    # prioritize rotation towards target_angle when choosing anglePos/angleNeg
-                    target_angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
-                    if self.laser_range[anglePos] >= stop_distance + 0.05 and target_angle > 0:
-                        destinationAngle = anglePos
-                        break
-                    if self.laser_range[angleNeg] >= stop_distance + 0.05 and target_angle <= 0:
-                        destinationAngle = angleNeg
-                        break
-                if destinationAngle < 180:
-                    self.rotatebot(destinationAngle + front_angle)
+                self.solAngle = destinationAngle
+                if destinationAngle - np.degrees(self.yaw) < 180:
+                    self.rotatebot(destinationAngle + front_angle )
                 else:
                     self.rotatebot(destinationAngle - 360 - front_angle)
                 print("destinationAngle", destinationAngle)
                 twist = Twist()
-                twist.linear.x = 0.1
+                twist.linear.x = 0.3
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
                 time.sleep(0.5)
                 print("Finish avoiding obstacle, moving around")
             else:
                 # Handles normal movement to target
-                print("target acquired")
                 print(target)
                 angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
                 if (target[1]-self.x) < 0:
@@ -438,9 +449,9 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                if angle > 0.1:
+                if abs(angle) > 0.1:
                     self.stopbot()
-                    self.rotatebot(angle)
+                    self.rotatebot(np.degrees(angle))
                 
                 print('Start moving')
                 twist = Twist()
