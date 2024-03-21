@@ -12,7 +12,6 @@ import scipy.stats
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 import cmath
-import time
 
 
 # constants
@@ -195,12 +194,10 @@ class Occupy(Node):
             if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)):
                 self.crashAngle = i
                 self.isCrashing = True
-                print("CRASHHHH")
                 break
             elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)):
                 self.crashAngle = 360 - i
                 self.isCrashing = True
-                print("CRASHHHH")
                 break
             else:
                 self.isCrashing = False
@@ -398,34 +395,35 @@ class Occupy(Node):
                 closestAngle = self.crashAngle
                 print("closestAngle", closestAngle)
                 destinationAngle = closestAngle
-                #print(self.laser_range[0], self.laser_range[89], self.laser_range[179], self.laser_range[269])
-                for i in range (30):
+                print(self.laser_range[0], self.laser_range[89], self.laser_range[179], self.laser_range[269])
+                for i in range (179):
                     anglePos = closestAngle + i #search in counter clockwise direction
                     angleNeg = closestAngle - i #search in clockwise direction
-                    # prevents index out of bound, keep both angles (0 - 359)
+                    # prevents index out of bound
                     if (anglePos > 359):
                         anglePos -= 359
                     if (angleNeg < 0):
                         angleNeg += 360
                         
-                    # prioritize rotation towards target_angle when choosing anglePos/angleNeg
-                    target_angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
-                    if self.laser_range[anglePos] >= stop_distance + 0.05 and target_angle > 0:
+                    if self.laser_range[anglePos] > stop_distance + 0.1:
                         destinationAngle = anglePos
                         break
-                    if self.laser_range[angleNeg] >= stop_distance + 0.05 and target_angle <= 0:
+                    if self.laser_range[angleNeg] > stop_distance + 0.1:
                         destinationAngle = angleNeg
                         break
-                if destinationAngle < 180:
+                if destinationAngle > 180:
+                    destinationAngle = 360 - destinationAngle
+                print("destinationAngle", destinationAngle)
+                if destinationAngle > 0:
                     self.rotatebot(destinationAngle + front_angle)
                 else:
-                    self.rotatebot(destinationAngle - 360 - front_angle)
-                print("destinationAngle", destinationAngle)
+                    self.rotatebot(destinationAngle - front_angle)
+                #else:
+                #    self.rotatebot(destinationAngle - front_angle)
                 twist = Twist()
                 twist.linear.x = 0.1
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
-                time.sleep(0.5)
                 print("Finish avoiding obstacle, moving around")
             else:
                 # Handles normal movement to target
@@ -439,7 +437,6 @@ class Occupy(Node):
                         angle -= np.pi
                 
                 if angle > 0.1:
-                    self.stopbot()
                     self.rotatebot(angle)
                 
                 print('Start moving')
