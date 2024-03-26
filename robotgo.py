@@ -43,8 +43,9 @@ def astar(maze,start,stop,step):
     endCell = Cell(None,stop)
     
     def wallinGrid(pos):
-        for i in range(-step,step):
-            for j in range(-step,step):
+        size = round(step/2)
+        for i in range(-size,size):
+            for j in range(-size,size):
                 if maze[pos[0]+i,pos[1]+j] == 3:
                     return True
         return False
@@ -228,6 +229,12 @@ class Occupy(Node):
             'map',
             self.listener_callback,
             qos_profile_sensor_data)
+        #create subscription for odometry
+        # self.odom_subscription = self.create_subscription(
+        #     Odometry,
+        #     'odom',
+        #     self.odom_callback,
+        #     10)
         
         # create subscription to track lidar
         self.scan_subscription = self.create_subscription(
@@ -252,8 +259,16 @@ class Occupy(Node):
         self.isCrashing = False
         self.crashAngle = 0
         self.isSpinning = False
+        self.path = []
         #self.startTime = time.time()
         #self.pastTargets = []
+        
+    # def odom_callback(self, msg):
+    #     # self.get_logger().info('In odom_callback')
+    #     position = msg.pose.pose.position
+    #     orientation_quat =  msg.pose.pose.orientation
+    #     self.x,self.y,self.z = position.x,position.y,position.z
+    #     self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -360,7 +375,7 @@ class Occupy(Node):
         try:
             trans = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time())
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
-            self.get_logger().info('No transformation found')
+            self.get_logger().info(e)
             self.stopbot()
             return
             
@@ -390,27 +405,32 @@ class Occupy(Node):
         target = self.target
         solgrid = []
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
-            self.stopbot()
-            # if target:
-            #     self.pastTargets.append(self.target)
-            # should only search frontier if there is no current target or have reached the current target
-            print("Frontier Positions")
-            frontier_positions = findfronteirs(odata,(grid_y,grid_x))
-            midpoint_positions = []
-            for i in frontier_positions:
-                midpoint_positions.append(median(i))
-            print(midpoint_positions)
-            midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
-            if midpoint_positions:
-                target = self.target
-                self.target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
-                target_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
-                turtlbot_grid = round(0.2/map_res)
-                solgrid = (astar(odata,(grid_y,grid_x),target_grid,turtlbot_grid))
-                print(solgrid)
-                #self.startTime = time.time()
+            if self.path:
+                self.target = self.path.pop(0)
             else:
-                print("no frontier found")
+                self.stopbot()
+                # if target:
+                #     self.pastTargets.append(self.target)
+                # should only search frontier if there is no current target or have reached the current target
+                print("Frontier Positions")
+                frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+                midpoint_positions = []
+                for i in frontier_positions:
+                    midpoint_positions.append(median(i))
+                print(midpoint_positions)
+                midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
+                if midpoint_positions:
+                    target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+                    goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
+                    turtlbot_grid = round(0.3/map_res)
+                    solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    for i in solgrid:
+                        self.path.append( (i[0] * map_res + map_origin.y,i[1] * map_res+map_origin.x) )
+                    self.target = self.path.pop(0)
+                    print(solgrid)
+                    #self.startTime = time.time()
+                else:
+                    print("no frontier found")
         if self.target:
             target_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
         
@@ -421,9 +441,7 @@ class Occupy(Node):
             print(grid_y,grid_x)
             print(target_grid)
             print(len(odata),len(odata[0]))
-            for i in range(-2,2):
-                for j in range(-2,2):
-                    odata[target_grid[0]+i,target_grid[1]+j] = 0
+            odata[target_grid[0],target_grid[1]] = 0
         if solgrid:
             for i in solgrid:
                 odata[i[0],i[1]] = 0
@@ -519,13 +537,6 @@ class Occupy(Node):
                 self.publisher.publish(twist)
                 time.sleep(0.5)
                 self.stopbot()          
-                
-                        
-                        
-                        
-                    
-                    
-                
             else:
                 # Handles normal movement to target
                 print("target acquired")
