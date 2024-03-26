@@ -13,17 +13,101 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 import cmath
 import time
+import heapq
 
 
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 20
+threshold = 5
 proximity_limit = 0.3
-rotatechange = 0.1
+rotatechange = 0.2
 stop_distance = 0.25
 front_angle = 30
+angleChange = 10
+#waitTime = 60
 
+class Cell:
+    def __init__(self,parent,pos):
+        self.parent = parent
+        self.pos = pos
+        self.f = 0
+        self.g = 0
+        self.h= 0
+        
+def distance(a,b):
+    return ((a.pos[0]-b.pos[0])**2 + (a.pos[1]-b.pos[1])**2)**0.5
+    
+def astar(maze,start,stop,step):
+    startCell = Cell(None,start)
+    endCell = Cell(None,stop)
+    
+    def wallinGrid(pos):
+        size = round(step/2)
+        for i in range(-size,size):
+            for j in range(-size,size):
+                if maze[pos[0]+i,pos[1]+j] == 3:
+                    return True
+        return False
+        
+    def addToOpen(cell):
+        open_list[cell.f] = cell
+        openPos.append(cell.pos)
+        
+    open_list = {}
+    openPos = []
+    closed_list = []
+    
+    addToOpen(startCell)
+
+    while open_list:
+        currentNode = open_list.pop(min(open_list.keys()))
+        openPos.pop(openPos.index(currentNode.pos))
+        closed_list.append(currentNode)
+        
+        if distance(currentNode,endCell) <= 1.5 * step:
+            path = []
+            current = currentNode
+            while current is not None:
+                path.append(current.pos)
+                current = current.parent
+            return path[::-1]
+    
+        x,y = currentNode.pos[0],currentNode.pos[1]
+        for i in range(-1,2):
+            for j in range(-1,2):
+                a = i * step
+                b = j * step
+                if (i == 0 and j == 0) or (not (0 <= x + a < len(maze))) or (not (0 <= y + b < len(maze[0]) -1)):
+                    continue
+                if wallinGrid((x+a,y+b)): # or any([maze[z[0],z[1]] == 3 for z in Adj((x+i,y+j),maze)])
+                    continue
+                newNode = Cell(currentNode, (x+a,y+b))
+                if newNode in closed_list:
+                    continue
+                newNode.g = currentNode.g + distance(currentNode,newNode)
+                newNode.h = distance(newNode,endCell)
+                newNode.f = newNode.g + newNode.h
+
+                
+                if newNode.pos in openPos:
+                    for item in open_list.items():
+                        if item == newNode.pos and newNode.g > item.g:
+                            continue             
+                addToOpen(newNode)
+            
+
+def Adj(p,tmap):
+    ans = []
+    for i in range(-1,2):
+        for j in range(-1,2):
+            if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(tmap[0]) -1 or p[0]+i > len(tmap) -1:
+                continue
+            ans.append((p[0]+i,p[1]+j))
+    return ans
+    
+
+            
 
 def median(arr):
     ind = round(len(arr)/2)
@@ -66,13 +150,7 @@ def findfronteirs(tmap,posi):
         return markmap.get(p,'Unmarked')
     
     def adj(p):
-        ans = []
-        for i in range(-1,2):
-            for j in range(-1,2):
-                if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(tmap[0]) -1 or p[0]+i > len(tmap) -1:
-                    continue
-                ans.append((p[0]+i,p[1]+j))
-        return ans
+        return Adj(p,tmap)
 
     #Defining basic parameters
     qm = []
@@ -109,7 +187,7 @@ def findfronteirs(tmap,posi):
                 
         for v in adj(p):
             if mark(v) not in ["Map-Open-List","Map-Close-List"]:
-                if any([tmap[x[0],x[1]]== 2 for x in adj(v)]):
+                if any([tmap[x[0],x[1]] == 2 for x in adj(v)]):
                        qm.append(v)
                        markmap[v] = "Map-Open-List"
         markmap[p] = "Map-Close-List"
@@ -151,6 +229,12 @@ class Occupy(Node):
             'map',
             self.listener_callback,
             qos_profile_sensor_data)
+        #create subscription for odometry
+        # self.odom_subscription = self.create_subscription(
+        #     Odometry,
+        #     'odom',
+        #     self.odom_callback,
+        #     10)
         
         # create subscription to track lidar
         self.scan_subscription = self.create_subscription(
@@ -174,6 +258,17 @@ class Occupy(Node):
         self.target = []
         self.isCrashing = False
         self.crashAngle = 0
+        self.isSpinning = False
+        self.path = []
+        #self.startTime = time.time()
+        #self.pastTargets = []
+        
+    # def odom_callback(self, msg):
+    #     # self.get_logger().info('In odom_callback')
+    #     position = msg.pose.pose.position
+    #     orientation_quat =  msg.pose.pose.orientation
+    #     self.x,self.y,self.z = position.x,position.y,position.z
+    #     self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -182,22 +277,13 @@ class Occupy(Node):
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
         
-        #front_angles = range(-front_angle,front_angle+1,1)
-        #lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
-        #if(len(lri[0])>0):
-        #    self.isCrashing = True
-        #    print("NABRAAAKKKKKKKKKKKKKKKKKKKKKKKKKK")
-            #print(self.laser_range)
-        #else:
-        #    self.isCrashing = False
-        
         for i in range(front_angle):
-            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)):
+            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)) and (not self.isSpinning):
                 self.crashAngle = i
                 self.isCrashing = True
                 print("CRASHHHH")
                 break
-            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)):
+            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)) and (not self.isSpinning):
                 self.crashAngle = 360 - i
                 self.isCrashing = True
                 print("CRASHHHH")
@@ -242,6 +328,7 @@ class Occupy(Node):
         twist.angular.z = c_change_dir * rotatechange
         # start rotation
         self.publisher.publish(twist)
+        self.isSpinning = True
 
         # we will use the c_dir_diff variable to see if we can stop rotating
         c_dir_diff = c_change_dir
@@ -249,9 +336,6 @@ class Occupy(Node):
         # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
         # becomes -1.0, and vice versa
         while(c_change_dir * c_dir_diff > 0):
-            if c_change_dir * c_dir_diff < 0.1:
-                print('cycle broken')
-                break
             # allow the callback functions to run
             rclpy.spin_once(self)
             current_yaw = self.yaw
@@ -269,6 +353,7 @@ class Occupy(Node):
         twist.angular.z = 0.0
         # stop the rotation
         self.publisher.publish(twist)
+        self.isSpinning = False
 
     def listener_callback(self, msg):
         # create numpy array
@@ -290,7 +375,8 @@ class Occupy(Node):
         try:
             trans = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time())
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
-            self.get_logger().info('No transformation found')
+            self.get_logger().info(e)
+            self.stopbot()
             return
             
         cur_pos = trans.transform.translation
@@ -317,29 +403,48 @@ class Occupy(Node):
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
         target = self.target
-
+        solgrid = []
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
-            # should only search frontier if there is no current target or have reached the current target
-            print("Frontier Positions")
-            frontier_positions = findfronteirs(odata,(grid_x,grid_y))
-            midpoint_positions = []
-            for i in frontier_positions:
-                midpoint_positions.append(median(i))
-            print(midpoint_positions)
-            midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
-            if midpoint_positions:
-                self.target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+            if self.path:
+                self.target = self.path.pop(0)
             else:
-                print("no frontier found")
+                self.stopbot()
+                # if target:
+                #     self.pastTargets.append(self.target)
+                # should only search frontier if there is no current target or have reached the current target
+                print("Frontier Positions")
+                frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+                midpoint_positions = []
+                for i in frontier_positions:
+                    midpoint_positions.append(median(i))
+                print(midpoint_positions)
+                midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
+                if midpoint_positions:
+                    target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+                    goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
+                    turtlbot_grid = round(0.3/map_res)
+                    solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    for i in solgrid:
+                        self.path.append( (i[0] * map_res + map_origin.y,i[1] * map_res+map_origin.x) )
+                    self.target = self.path.pop(0)
+                    print(solgrid)
+                    #self.startTime = time.time()
+                else:
+                    print("no frontier found")
         if self.target:
-            target_grid = [round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res)]
+            target_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
+        
         else:
             target_grid = []
         
         if target_grid:
-            for i in range(-2,2):
-                for j in range(-2,2):
-                    odata[target_grid[0]+i,target_grid[1]+j] = 0
+            print(grid_y,grid_x)
+            print(target_grid)
+            print(len(odata),len(odata[0]))
+            odata[target_grid[0],target_grid[1]] = 0
+        if solgrid:
+            for i in solgrid:
+                odata[i[0],i[1]] = 0
                     
         # create image from 2D array using PIL
         img = Image.fromarray(odata)
@@ -390,43 +495,48 @@ class Occupy(Node):
         
     def movetotarget(self, target):
         if target:
+            # if time.time() - self.startTime > waitTime and self.pastTargets:
+            #     print("TIMES UP")
+            #     self.target = self.pastTargets[-2]
+            #     self.startTime = time.time()
             if (self.isCrashing):
                 # Handles crash avoidance
                 print("Avoiding crash")
                 self.stopbot()
-                #closestAngle = np.nanargmin(self.laser_range)
-                closestAngle = self.crashAngle
-                print("closestAngle", closestAngle)
-                destinationAngle = closestAngle
-                #print(self.laser_range[0], self.laser_range[89], self.laser_range[179], self.laser_range[269])
-                for i in range (30):
-                    anglePos = closestAngle + i #search in counter clockwise direction
-                    angleNeg = closestAngle - i #search in clockwise direction
-                    # prevents index out of bound, keep both angles (0 - 359)
-                    if (anglePos > 359):
-                        anglePos -= 359
-                    if (angleNeg < 0):
-                        angleNeg += 360
-                        
-                    # prioritize rotation towards target_angle when choosing anglePos/angleNeg
-                    target_angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
-                    if self.laser_range[anglePos] >= stop_distance + 0.05 and target_angle > 0:
-                        destinationAngle = anglePos
+                closestAngle = np.nanargmin(self.laser_range)
+                leftFound = False
+                rightFound = False
+                for i in range(0,180):
+                    anglePos = (closestAngle +i)%360
+                    if (not rightFound) and self.laser_range[anglePos] > stop_distance + 0.2:
+                        posDisplace = i
+                        rightFound = True
+                    angleNeg = (closestAngle - i)%360
+                    if (not leftFound) and self.laser_range[angleNeg]> stop_distance + 0.2:
+                        negDisplace = i
+                        leftFound = True
+                    if leftFound and rightFound:
                         break
-                    if self.laser_range[angleNeg] >= stop_distance + 0.05 and target_angle <= 0:
-                        destinationAngle = angleNeg
-                        break
-                if destinationAngle < 180:
-                    self.rotatebot(destinationAngle + front_angle)
+                print(posDisplace, negDisplace)
+                posAngle = (closestAngle + posDisplace)%360
+                negAngle = (closestAngle - negDisplace)%360
+                if posAngle > 180:
+                    posAngle = posAngle - 360
+                if negAngle > 180:
+                    negAngle = negAngle - 360
+                
+                if posAngle + negAngle < 0:
+                    destinationAngle = posAngle + 30
                 else:
-                    self.rotatebot(destinationAngle - 360 - front_angle)
-                print("destinationAngle", destinationAngle)
+                    destinationAngle = negAngle - 30
+                
+                self.rotatebot(destinationAngle)
                 twist = Twist()
-                twist.linear.x = 0.1
+                twist.linear.x = 0.3
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
-                time.sleep(0.5)
-                print("Finish avoiding obstacle, moving around")
+                time.sleep(1)
+                self.stopbot()          
             else:
                 # Handles normal movement to target
                 print("target acquired")
@@ -438,9 +548,9 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                if angle > 0.1:
+                if abs(angle) > 0.2:
                     self.stopbot()
-                    self.rotatebot(angle)
+                    self.rotatebot(np.degrees(angle))
                 
                 print('Start moving')
                 twist = Twist()

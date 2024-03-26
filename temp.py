@@ -12,6 +12,7 @@ import scipy.stats
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 import cmath
+import time
 
 
 # constants
@@ -38,6 +39,71 @@ def sortpos(arr,x,y):
         ans.append(distancedic[i])
     return ans
 
+def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, resolution):
+    margin_grid = (int)(0.1/resolution)
+    #print(margin_grid)
+    if (target_y_grid == curr_y_grid):
+        for x in range (curr_x_grid, target_x_grid, 1):
+            y = target_y_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    elif (target_x_grid == curr_x_grid):
+        for y in range (curr_y_grid, target_y_grid, 1):
+            x = target_x_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    else:
+        gradient = (float)(target_y_grid - curr_y_grid)/(float)(target_x_grid - curr_x_grid)
+        x_init = curr_x_grid #for iteration
+        y_init = curr_y_grid
+        x_dest = target_x_grid
+        if curr_x_grid > target_x_grid:
+            x_init = target_x_grid
+            y_init = target_y_grid
+            x_dest = curr_x_grid
+        for x in range (x_init + 1, x_dest, 1):
+            y = gradient * (x - x_init) + y_init
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    return True
+
+def searchCommonPoint(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, map_res):
+    queue = []
+    visited = []
+    markmap ={}
+    initial_pos = (curr_y_grid, curr_x_grid)
+    queue.append(initial_pos)
+    markmap[initial_pos] = "open"
+
+    def adj(p):
+        ans = []
+        for i in range(-1,2):
+            for j in range(-1,2):
+                if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(map_odata[0]) -1 or p[0]+i > len(map_odata) -1:
+                    continue
+                ans.append((p[0]+i,p[1]+j))
+        return ans
+    
+    def mark(p):
+        return markmap.get(p,'unmarked')
+    
+    while queue:
+        p = queue.pop(0)
+        
+        if (ableToTravel(map_odata, curr_x_grid, curr_y_grid, p[1], p[0], map_res) and ableToTravel(map_odata, p[1], p[0], target_x_grid, target_y_grid, map_res)):
+            return p
+        
+        for neighbor in adj(p):
+            if neighbor not in visited:
+                queue.append(neighbor)
+                visited.append(neighbor)
+                if map_odata[p[0], p[1]] == 3:
+                    markmap[p] = "close"
+                else:
+                    markmap[p] = "open"
+    return (target_y_grid, target_x_grid)
+
+    
 def findfronteirs(tmap,posi):
     frontiers = []
     markmap ={}
@@ -171,8 +237,10 @@ class Occupy(Node):
         self.x = 0
         self.y = 0
         self.target = []
+        self.target2 = []
         self.isCrashing = False
         self.crashAngle = 0
+        self.abletotravel = True
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -194,10 +262,12 @@ class Occupy(Node):
             if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)):
                 self.crashAngle = i
                 self.isCrashing = True
+                print("CRASHHHH")
                 break
             elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)):
                 self.crashAngle = 360 - i
                 self.isCrashing = True
+                print("CRASHHHH")
                 break
             else:
                 self.isCrashing = False
@@ -318,7 +388,7 @@ class Occupy(Node):
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
             # should only search frontier if there is no current target or have reached the current target
             print("Frontier Positions")
-            frontier_positions = findfronteirs(odata,(grid_x,grid_y))
+            frontier_positions = findfronteirs(odata,(grid_y,grid_x))
             midpoint_positions = []
             for i in frontier_positions:
                 midpoint_positions.append(median(i))
@@ -334,9 +404,20 @@ class Occupy(Node):
             target_grid = []
         
         if target_grid:
+            abletotravel = ableToTravel(odata, grid_x, grid_y, target_grid[1], target_grid[0], map_res)
+            print("Able to travel: ", abletotravel)
             for i in range(-2,2):
                 for j in range(-2,2):
                     odata[target_grid[0]+i,target_grid[1]+j] = 0
+            if (not abletotravel):
+                self.abletotravel = False
+                p = searchCommonPoint(odata, grid_x, grid_y, target_grid[1], target_grid[0], map_res)
+                self.target2 = p
+                for i in range(-2,2):
+                    for j in range(-2,2):
+                        odata[p[0]+i,p[1]+j] = 0
+            else:
+                self.abletotravel = True
                     
         # create image from 2D array using PIL
         img = Image.fromarray(odata)
@@ -387,44 +468,48 @@ class Occupy(Node):
         
     def movetotarget(self, target):
         if target:
+            # if time.time() - self.startTime > waitTime and self.pastTargets:
+            #     print("TIMES UP")
+            #     self.target = self.pastTargets[-2]
+            #     self.startTime = time.time()
             if (self.isCrashing):
                 # Handles crash avoidance
                 print("Avoiding crash")
                 self.stopbot()
-                #closestAngle = np.nanargmin(self.laser_range)
-                closestAngle = self.crashAngle
-                print("closestAngle", closestAngle)
-                destinationAngle = closestAngle
-                print(self.laser_range[0], self.laser_range[89], self.laser_range[179], self.laser_range[269])
-                for i in range (179):
-                    anglePos = closestAngle + i #search in counter clockwise direction
-                    angleNeg = closestAngle - i #search in clockwise direction
-                    # prevents index out of bound
-                    if (anglePos > 359):
-                        anglePos -= 359
-                    if (angleNeg < 0):
-                        angleNeg += 360
-                        
-                    if self.laser_range[anglePos] > stop_distance + 0.1:
-                        destinationAngle = anglePos
+                closestAngle = np.nanargmin(self.laser_range)
+                leftFound = False
+                rightFound = False
+                for i in range(0,180):
+                    anglePos = (closestAngle +i)%360
+                    if (not rightFound) and self.laser_range[anglePos] > stop_distance + 0.2:
+                        posDisplace = i
+                        rightFound = True
+                    angleNeg = (closestAngle - i)%360
+                    if (not leftFound) and self.laser_range[angleNeg]> stop_distance + 0.2:
+                        negDisplace = i
+                        leftFound = True
+                    if leftFound and rightFound:
                         break
-                    if self.laser_range[angleNeg] > stop_distance + 0.1:
-                        destinationAngle = angleNeg
-                        break
-                if destinationAngle > 180:
-                    destinationAngle = 360 - destinationAngle
-                print("destinationAngle", destinationAngle)
-                if destinationAngle > 0:
-                    self.rotatebot(destinationAngle + front_angle)
+                print(posDisplace, negDisplace)
+                posAngle = (closestAngle + posDisplace)%360
+                negAngle = (closestAngle - negDisplace)%360
+                if posAngle > 180:
+                    posAngle = posAngle - 360
+                if negAngle > 180:
+                    negAngle = negAngle - 360
+                
+                if posAngle + negAngle < 0:
+                    destinationAngle = posAngle + 30
                 else:
-                    self.rotatebot(destinationAngle - front_angle)
-                #else:
-                #    self.rotatebot(destinationAngle - front_angle)
+                    destinationAngle = negAngle - 30
+                
+                self.rotatebot(destinationAngle)
                 twist = Twist()
-                twist.linear.x = 0.1
+                twist.linear.x = 0.3
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
-                print("Finish avoiding obstacle, moving around")
+                time.sleep(1)
+                self.stopbot()          
             else:
                 # Handles normal movement to target
                 print("target acquired")
@@ -436,8 +521,9 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                if angle > 0.1:
-                    self.rotatebot(angle)
+                if abs(angle) > 0.2:
+                    self.stopbot()
+                    self.rotatebot(np.degrees(angle))
                 
                 print('Start moving')
                 twist = Twist()
@@ -454,11 +540,15 @@ class Occupy(Node):
             rclpy.spin_once(self)
             try:
                 target = self.target
-                if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit:
+                target2 = self.target2
+                if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit or abs(target2[1]-self.x) + abs(target2[0]-self.y) < proximity_limit:
                     print("Target reached")
                     self.stopbot()
                 else:
-                    self.movetotarget(target)
+                    if self.abletotravel:
+                        self.movetotarget(target)
+                    else:
+                        self.movetotarget(target2)
             except Exception as e:
                 print(e)
 
