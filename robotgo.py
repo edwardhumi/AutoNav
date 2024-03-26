@@ -39,15 +39,21 @@ def distance(a,b):
     return ((a.pos[0]-b.pos[0])**2 + (a.pos[1]-b.pos[1])**2)**0.5
     
 def astar(maze,start,stop,step):
+    print('A* Running')
     startCell = Cell(None,start)
     endCell = Cell(None,stop)
     
     def wallinGrid(pos):
         size = round(step/2)
+        count = 0
         for i in range(-size,size):
             for j in range(-size,size):
                 if maze[pos[0]+i,pos[1]+j] == 3:
-                    return True
+                    count += 1
+                    if count == size:
+                        return True
+        if maze[pos[0],pos[1]] == 1:
+            return True
         return False
         
     def addToOpen(cell):
@@ -302,14 +308,13 @@ class Occupy(Node):
         self.publisher.publish(twist)
         
     def rotatebot(self, rot_angle):
-        # self.get_logger().info('In rotatebot')
+        self.get_logger().info('In rotatebot')
         # create Twist object
         twist = Twist()
         
         # get current yaw angle
         current_yaw = self.yaw
         # log the info
-        self.get_logger().info('Current: %f' % math.degrees(current_yaw))
         # we are going to use complex numbers to avoid problems when the angles go from
         # 360 to 0, or from -180 to 180
         c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
@@ -317,7 +322,6 @@ class Occupy(Node):
         target_yaw = current_yaw + math.radians(rot_angle)
         # convert to complex notation
         c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
-        self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
         # divide the two complex numbers to get the change in direction
         c_change = c_target_yaw / c_yaw
         # get the sign of the imaginary component to figure out which way we have to turn
@@ -348,7 +352,6 @@ class Occupy(Node):
             c_dir_diff = np.sign(c_change.imag)
             # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
 
-        self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
         # set the rotation speed to 0
         twist.angular.z = 0.0
         # stop the rotation
@@ -381,7 +384,6 @@ class Occupy(Node):
             
         cur_pos = trans.transform.translation
         cur_rot = trans.transform.rotation
-        self.get_logger().info('Trans: %f, %f' % (cur_pos.x, cur_pos.y))
         self.x,self.y = cur_pos.x,cur_pos.y
         # convert quaternion to Euler angles
         roll, pitch, yaw = euler_from_quaternion(cur_rot.x, cur_rot.y, cur_rot.z, cur_rot.w)
@@ -428,6 +430,7 @@ class Occupy(Node):
                         self.path.append( (i[0] * map_res + map_origin.y,i[1] * map_res+map_origin.x) )
                     self.target = self.path.pop(0)
                     print(solgrid)
+                    print(self.target)
                     #self.startTime = time.time()
                 else:
                     print("no frontier found")
@@ -438,9 +441,6 @@ class Occupy(Node):
             target_grid = []
         
         if target_grid:
-            print(grid_y,grid_x)
-            print(target_grid)
-            print(len(odata),len(odata[0]))
             odata[target_grid[0],target_grid[1]] = 0
         if solgrid:
             for i in solgrid:
@@ -495,10 +495,6 @@ class Occupy(Node):
         
     def movetotarget(self, target):
         if target:
-            # if time.time() - self.startTime > waitTime and self.pastTargets:
-            #     print("TIMES UP")
-            #     self.target = self.pastTargets[-2]
-            #     self.startTime = time.time()
             if (self.isCrashing):
                 # Handles crash avoidance
                 print("Avoiding crash")
@@ -564,6 +560,7 @@ class Occupy(Node):
         rclpy.spin_once(self)
         print(target)
         while (True):
+            print('moving')
             rclpy.spin_once(self)
             try:
                 target = self.target
