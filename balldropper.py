@@ -34,14 +34,14 @@ s8 = 27;
 servo_pin = 12
 pwm_pin = 18
 
-GPIO.setup(pin_s1, GPIO.IN)
-GPIO.setup(pin_s2, GPIO.IN)
-GPIO.setup(pin_s3, GPIO.IN)
-GPIO.setup(pin_s4, GPIO.IN)
-GPIO.setup(pin_s5, GPIO.IN)
-GPIO.setup(pin_s6, GPIO.IN)
-GPIO.setup(pin_s7, GPIO.IN)
-GPIO.setup(pin_s8, GPIO.IN)
+GPIO.setup(s1, GPIO.IN)
+GPIO.setup(s2, GPIO.IN)
+GPIO.setup(s3, GPIO.IN)
+GPIO.setup(s4, GPIO.IN)
+GPIO.setup(s5, GPIO.IN)
+GPIO.setup(s6, GPIO.IN)
+GPIO.setup(s7, GPIO.IN)
+GPIO.setup(s8, GPIO.IN)
 GPIO.setup(pwm_pin, GPIO.OUT)
 
 
@@ -316,6 +316,6 @@ def main(args=None):
     # when the garbage collector destroys the node object)
 
 
-if name == 'main':
+if __name__ == 'main':
     main()
     
