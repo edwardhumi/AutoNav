@@ -25,8 +25,9 @@ s6 = 22;
 s7 = 26;
 s8 = 27;
 
-#receive HIGH or LOW from esp32
-esp32_pin = 23;
+#read HIGH or LOW from esp32 pins 16 and 17
+esp32_pin1 = 23; #connect to pin 16 of esp
+esp32_pin2 = 24; #connect to pin 17 of esp
 
 GPIO.setup(s1, GPIO.IN)
 GPIO.setup(s2, GPIO.IN)
@@ -36,7 +37,8 @@ GPIO.setup(s5, GPIO.IN)
 GPIO.setup(s6, GPIO.IN)
 GPIO.setup(s7, GPIO.IN)
 GPIO.setup(s8, GPIO.IN)
-GPIO.setup(esp32_pin, GPIO.IN)
+GPIO.setup(esp32_pin1, GPIO.IN)
+GPIO.setup(esp32_pin2, GPIO.IN)
 
 class Mover(Node):
     def __init__(self):
@@ -158,14 +160,17 @@ class lineFollow(Node):
             mover = Mover()
             mover.stop()
             #assuming door 1 is on the left
-            if GPIO.input(esp32_pin):
+            if (GPIO.input(esp32_pin1) and not(GPIO.input(esp32_pin2))):
                 #run for 3 seconds
                 mover.left()
                 time.sleep(3)
             #if rpi received that door 2 is unlocked
-            else:
+            elif (GPIO.input(esp32_pin2) and not(GPIO.input(esp32_pin1))):
                 mover.right()
                 #run for 3 seconds
+                time.sleep(3)
+            else:
+                mover.stop()
                 time.sleep(3)
             
         #follow black line, forward, right, left, stop
