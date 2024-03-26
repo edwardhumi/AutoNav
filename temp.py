@@ -18,12 +18,26 @@ import time
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 20
+threshold = 10
 proximity_limit = 0.3
-rotatechange = 0.1
+rotatechange = 0.2
 stop_distance = 0.25
 front_angle = 30
+angleChange = 10
+#waitTime = 60
 
+
+def Adj(p,tmap):
+    ans = []
+    for i in range(-1,2):
+        for j in range(-1,2):
+            if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(tmap[0]) -1 or p[0]+i > len(tmap) -1:
+                continue
+            ans.append((p[0]+i,p[1]+j))
+    return ans
+    
+
+            
 
 def median(arr):
     ind = round(len(arr)/2)
@@ -131,13 +145,7 @@ def findfronteirs(tmap,posi):
         return markmap.get(p,'Unmarked')
     
     def adj(p):
-        ans = []
-        for i in range(-1,2):
-            for j in range(-1,2):
-                if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or p[1] + j > len(tmap[0]) -1 or p[0]+i > len(tmap) -1:
-                    continue
-                ans.append((p[0]+i,p[1]+j))
-        return ans
+        return Adj(p,tmap)
 
     #Defining basic parameters
     qm = []
@@ -174,7 +182,7 @@ def findfronteirs(tmap,posi):
                 
         for v in adj(p):
             if mark(v) not in ["Map-Open-List","Map-Close-List"]:
-                if any([tmap[x[0],x[1]]== 2 for x in adj(v)]):
+                if any([tmap[x[0],x[1]] == 2 for x in adj(v)]):
                        qm.append(v)
                        markmap[v] = "Map-Open-List"
         markmap[p] = "Map-Close-List"
@@ -241,6 +249,9 @@ class Occupy(Node):
         self.isCrashing = False
         self.crashAngle = 0
         self.abletotravel = True
+        self.isSpinning = False
+        #self.startTime = time.time()
+        #self.pastTargets = []
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -249,22 +260,13 @@ class Occupy(Node):
         # replace 0's with nan
         self.laser_range[self.laser_range==0] = np.nan
         
-        #front_angles = range(-front_angle,front_angle+1,1)
-        #lri = (self.laser_range[front_angles]<float(stop_distance)).nonzero()
-        #if(len(lri[0])>0):
-        #    self.isCrashing = True
-        #    print("NABRAAAKKKKKKKKKKKKKKKKKKKKKKKKKK")
-            #print(self.laser_range)
-        #else:
-        #    self.isCrashing = False
-        
         for i in range(front_angle):
-            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)):
+            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)) and (not self.isSpinning):
                 self.crashAngle = i
                 self.isCrashing = True
                 print("CRASHHHH")
                 break
-            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)):
+            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)) and (not self.isSpinning):
                 self.crashAngle = 360 - i
                 self.isCrashing = True
                 print("CRASHHHH")
@@ -309,6 +311,7 @@ class Occupy(Node):
         twist.angular.z = c_change_dir * rotatechange
         # start rotation
         self.publisher.publish(twist)
+        self.isSpinning = True
 
         # we will use the c_dir_diff variable to see if we can stop rotating
         c_dir_diff = c_change_dir
@@ -316,9 +319,6 @@ class Occupy(Node):
         # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
         # becomes -1.0, and vice versa
         while(c_change_dir * c_dir_diff > 0):
-            if c_change_dir * c_dir_diff < 0.1:
-                print('cycle broken')
-                break
             # allow the callback functions to run
             rclpy.spin_once(self)
             current_yaw = self.yaw
@@ -336,6 +336,7 @@ class Occupy(Node):
         twist.angular.z = 0.0
         # stop the rotation
         self.publisher.publish(twist)
+        self.isSpinning = False
 
     def listener_callback(self, msg):
         # create numpy array
@@ -358,6 +359,7 @@ class Occupy(Node):
             trans = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time())
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
             self.get_logger().info('No transformation found')
+            self.stopbot()
             return
             
         cur_pos = trans.transform.translation
@@ -386,6 +388,8 @@ class Occupy(Node):
         target = self.target
 
         if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
+            # if target:
+            #     self.pastTargets.append(self.target)
             # should only search frontier if there is no current target or have reached the current target
             print("Frontier Positions")
             frontier_positions = findfronteirs(odata,(grid_y,grid_x))
@@ -395,9 +399,12 @@ class Occupy(Node):
             print(midpoint_positions)
             midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
             if midpoint_positions:
+                target = self.target
                 self.target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+                #self.startTime = time.time()
             else:
                 print("no frontier found")
+                
         if self.target:
             target_grid = [round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res)]
         else:
@@ -406,6 +413,9 @@ class Occupy(Node):
         if target_grid:
             abletotravel = ableToTravel(odata, grid_x, grid_y, target_grid[1], target_grid[0], map_res)
             print("Able to travel: ", abletotravel)
+            print(grid_y,grid_x)
+            print(target_grid)
+            print(len(odata),len(odata[0]))
             for i in range(-2,2):
                 for j in range(-2,2):
                     odata[target_grid[0]+i,target_grid[1]+j] = 0

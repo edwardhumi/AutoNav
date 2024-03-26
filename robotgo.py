@@ -535,7 +535,11 @@ class Occupy(Node):
                 twist.linear.x = 0.3
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
+<<<<<<< HEAD
                 time.sleep(1)
+=======
+                time.sleep(0.5)
+>>>>>>> 79c7e2fc1f3d9b55c6590d7c272a2e11fb9261d7
                 self.stopbot()          
             else:
                 # Handles normal movement to target
