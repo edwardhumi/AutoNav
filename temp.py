@@ -77,7 +77,7 @@ def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_gr
             x_dest = curr_x_grid
         for x in range (x_init + 1, x_dest, 1):
             y = gradient * (x - x_init) + y_init
-            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+            if (np.any(map_odata[math.ceil(y), x] == 3) or np.any(map_odata[math.floor(y), x] == 3)):
                 return False    # meet a wall
     return True
 
