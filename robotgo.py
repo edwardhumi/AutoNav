@@ -50,7 +50,7 @@ def astar(maze,start,stop,step):
     print('A* Running')
     startCell = Cell(None,start)
     endCell = Cell(None,stop)
-    if distance(startCell,endCell) < step:
+    if distance(startCell,endCell) < 1.5 * step:
         return[stop]
     def wallinGrid(pos):
         size = round(step/2)
@@ -60,9 +60,7 @@ def astar(maze,start,stop,step):
                 if pos[0]+i > len(maze)-1 or pos[1] + j > len(maze[0]) -1:
                     continue
                 if maze[pos[0]+i,pos[1]+j] == 3:
-                    count += 1
-                    if count >= 0.2 * size:
-                        return True
+                    return True
         if maze[pos[0],pos[1]] == 3:
              return True
         return False
@@ -122,9 +120,36 @@ def Adj(p,tmap):
                 continue
             ans.append((p[0]+i,p[1]+j))
     return ans
-    
 
-            
+def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, resolution):
+    margin_grid = (int)(0.1/resolution)
+    #print(margin_grid)
+    if (target_y_grid == curr_y_grid):
+        for x in range (curr_x_grid, target_x_grid, 1):
+            y = target_y_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    elif (target_x_grid == curr_x_grid):
+        for y in range (curr_y_grid, target_y_grid, 1):
+            x = target_x_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    else:
+        gradient = (float)(target_y_grid - curr_y_grid)/(float)(target_x_grid - curr_x_grid)
+        x_init = curr_x_grid #for iteration
+        y_init = curr_y_grid
+        x_dest = target_x_grid
+        if curr_x_grid > target_x_grid:
+            x_init = target_x_grid
+            y_init = target_y_grid
+            x_dest = curr_x_grid
+        for x in range (x_init + 1, x_dest, 1):
+            y = gradient * (x - x_init) + y_init
+            if (np.any(map_odata[math.ceil(y), x] == 3) or np.any(map_odata[math.floor(y), x] == 3)):
+                return False    # meet a wall
+    return True
+
+        
 
 def median(arr):
     ind = round(len(arr)/2)
@@ -429,7 +454,15 @@ class Occupy(Node):
             if self.path:
                 if not any([odata[round((self.currentFrontier[0]-map_origin.y)/map_res)+x[0],round((self.currentFrontier[1]-map_origin.x)/map_res)+x[1]] == 1 for x in ((1,0),(0,1),(-1,0),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1))]):
                     self.path = []
-                else:                    
+                else:
+                    solgrid = [(round((x[0]-map_origin.y)/map_res),round((x[1]-map_origin.x)/map_res)) for x in self.path]
+                    for x in range(1,len(solgrid)-1):
+                        print(x)
+                        try:
+                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
+                                self.path = self.path[-x:]
+                        except:
+                            continue
                     self.target = self.path.pop(0)
             else:
                 self.path = []
@@ -451,6 +484,13 @@ class Occupy(Node):
                     goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
                     turtlbot_grid = round(0.3/map_res)
                     solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    for x in range(1,len(solgrid)-1):
+                        print(x)
+                        try:
+                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
+                                solgrid = solgrid[-x:]
+                        except:
+                            continue
                     print(solgrid)
                     
                     for i in solgrid:
@@ -503,6 +543,7 @@ class Occupy(Node):
     
             # rotate by 90 degrees so that the forward direction is at the top of the image
             rotated = img_transformed.rotate(np.degrees(yaw)-90, expand=True, fillcolor=map_bg_color)
+            rotated.save('Map.png',cmap = 'gray',origin = 'lower')
     
             # show the image using grayscale map
             # plt.imshow(img, cmap='gray', origin='lower')
