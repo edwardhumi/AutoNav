@@ -99,9 +99,11 @@ class AutoNav(Node):
 
 
     def odom_callback(self, msg):
-        # self.get_logger().info('In odom_callback')
+        self.get_logger().info('In odom_callback')
+        position = msg.pose.pos.position
         orientation_quat =  msg.pose.pose.orientation
         self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
+        self.x,self.y,self.z = position.x,position.y,position.z
 
 
     def occ_callback(self, msg):
