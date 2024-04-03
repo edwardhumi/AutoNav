@@ -10,18 +10,20 @@ payload = {
 
 headers = {'Content-Type': 'application/json'}
 
-while True:
-    response = requests.post(url, json=payload, headers=headers)
+while response.status_code != 200:  
 
-    if response.status_code == 200:
+    response = requests.post(url, json=payload, headers=headers)
+    elif response.status_code == 400:
+        response_data = response.json()
+        print("Error:", response_data)['data']['message'])
+
+
+    print(response.text)
+
+    if (response.status_code == 200):
         response_data = response.json()
         print(response_data['data']['message'])
 
-        break
-
-    elif (response.status_code == 400):
-        response_data = response.json()
-        print("Error:" response_data['data']['message'])
 
 
 
