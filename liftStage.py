@@ -12,8 +12,8 @@ import time
 import RPi.GPIO as GPIO
 GPIO.setmode(GPIO.BCM)
 
-rotatechange = 0.1
-speedchange = 0.05
+rotatechange = 0.05
+speedchange = 0.1
 
 #there are 8 inputs from the linefollower
 #GPIO pins to be used are
@@ -146,12 +146,30 @@ class Mover(Node):
         self.publisher_.publish(twist)
     
     def right(self):
-        self.rotatebot(-90)
-        self.forward()
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z -= rotatechange
+        # start movement
+        self.publisher_.publish(twist)
     
     def left(self):
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z += rotatechange
+        # start movement
+        self.publisher_.publish(twist)
+    
+    def rightForward(self):
+        # rotate right then forward
+        self.rotatebot(-90)
+        self.stop()
+        self.direction = "forward"
+    
+    def leftForward(self):
+        # rotate left then forward
         self.rotatebot(90)
-        self.forward()
+        self.stop()
+        self.direction = "forward"
     
     def stop(self):
         twist = Twist()
@@ -177,11 +195,11 @@ class Mover(Node):
             #assuming door 1 is on the left
             if (GPIO.input(esp32_pin1) and not(GPIO.input(esp32_pin2))):
                 #run for 3 seconds
-                self.direction = "left"
+                self.direction = "leftForward"
                 time.sleep(3)
             #if rpi received that door 2 is unlocked
             elif (GPIO.input(esp32_pin2) and not(GPIO.input(esp32_pin1))):
-                self.direction = "right"
+                self.direction = "rightForward"
                 #run for 3 seconds
                 time.sleep(3)
             else:
@@ -236,17 +254,26 @@ class Mover(Node):
         
     def move(self):
         while (True):
-            print('moving')
             rclpy.spin_once(self)
             try:
                 if (self.direction == "stop"):
                     self.stop()
+                    print("Stop")
                 elif (self.direction == "right"):
                     self.right()
+                    print("Right")
                 elif (self.direction == "left"):
                     self.left()
+                    print("Left")
                 elif (self.direction == "forward"):
                     self.forward()
+                    print("Forward")
+                elif (self.direction == "leftForward"):
+                    self.leftForward()
+                    print("leftForward")
+                elif (self.direction == "rightForward"):
+                    self.rightForward()
+                    print("rightForward")
             except Exception as e:
                 print(e)
 
