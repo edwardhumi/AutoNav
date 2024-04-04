@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar 28 04:33:40 2024
+
+@author: john
+"""
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -20,8 +28,8 @@ import heapq
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 5
-proximity_limit = 0.3
-rotatechange = 0.2
+proximity_limit = 0.24
+rotatechange = 0.1
 stop_distance = 0.25
 front_angle = 30
 angleChange = 10
@@ -42,18 +50,18 @@ def astar(maze,start,stop,step):
     print('A* Running')
     startCell = Cell(None,start)
     endCell = Cell(None,stop)
-    
+    if distance(startCell,endCell) < 1.8 * step:
+        return[stop]
     def wallinGrid(pos):
         size = round(step/2)
-        count = 0
         for i in range(-size,size):
             for j in range(-size,size):
+                if pos[0]+i > len(maze)-1 or pos[1] + j > len(maze[0]) -1:
+                    continue
                 if maze[pos[0]+i,pos[1]+j] == 3:
-                    count += 1
-                    if count == size:
-                        return True
-        if maze[pos[0],pos[1]] == 1:
-            return True
+                    return True
+        if maze[pos[0],pos[1]] == 3:
+             return True
         return False
         
     def addToOpen(cell):
@@ -71,7 +79,7 @@ def astar(maze,start,stop,step):
         openPos.pop(openPos.index(currentNode.pos))
         closed_list.append(currentNode)
         
-        if distance(currentNode,endCell) <= 1.5 * step:
+        if distance(currentNode,endCell) <= 1.8 * step:
             path = []
             current = currentNode
             while current is not None:
@@ -111,9 +119,36 @@ def Adj(p,tmap):
                 continue
             ans.append((p[0]+i,p[1]+j))
     return ans
-    
 
-            
+def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, resolution):
+    margin_grid = (int)(0.1/resolution)
+    #print(margin_grid)
+    if (target_y_grid == curr_y_grid):
+        for x in range (curr_x_grid, target_x_grid, 1):
+            y = target_y_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    elif (target_x_grid == curr_x_grid):
+        for y in range (curr_y_grid, target_y_grid, 1):
+            x = target_x_grid
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+                return False    # meet a wall
+    else:
+        gradient = (float)(target_y_grid - curr_y_grid)/(float)(target_x_grid - curr_x_grid)
+        x_init = curr_x_grid #for iteration
+        y_init = curr_y_grid
+        x_dest = target_x_grid
+        if curr_x_grid > target_x_grid:
+            x_init = target_x_grid
+            y_init = target_y_grid
+            x_dest = curr_x_grid
+        for x in range (x_init + 1, x_dest, 1):
+            y = gradient * (x - x_init) + y_init
+            if (np.any(map_odata[math.ceil(y), x] == 3) or np.any(map_odata[math.floor(y), x] == 3)):
+                return False    # meet a wall
+    return True
+
+        
 
 def median(arr):
     ind = round(len(arr)/2)
@@ -266,15 +301,20 @@ class Occupy(Node):
         self.crashAngle = 0
         self.isSpinning = False
         self.path = []
+        self.currentFrontier = []
+        self.shouldScan = False
+        self.doneMapping = False
+        # self.angularspeed = 0
         #self.startTime = time.time()
         #self.pastTargets = []
         
     # def odom_callback(self, msg):
     #     # self.get_logger().info('In odom_callback')
-    #     position = msg.pose.pose.position
-    #     orientation_quat =  msg.pose.pose.orientation
-    #     self.x,self.y,self.z = position.x,position.y,position.z
-    #     self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
+    #     # position = msg.pose.pose.position
+    #     # orientation_quat =  msg.pose.pose.orientation
+    #     self.angularspeed = msg.twist.twist.angular.z
+    #     # self.x,self.y,self.z = position.x,position.y,position.z
+    #     # self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
         
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
@@ -284,12 +324,12 @@ class Occupy(Node):
         self.laser_range[self.laser_range==0] = np.nan
         
         for i in range(front_angle):
-            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)) and (not self.isSpinning):
+            if (self.laser_range[i] != np.nan and self.laser_range[i] < float(stop_distance)) and (not self.isSpinning) and self.target:
                 self.crashAngle = i
                 self.isCrashing = True
                 print("CRASHHHH")
                 break
-            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)) and (not self.isSpinning):
+            elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)) and (not self.isSpinning) and self.target:
                 self.crashAngle = 360 - i
                 self.isCrashing = True
                 print("CRASHHHH")
@@ -329,28 +369,31 @@ class Occupy(Node):
         # set linear speed to zero so the TurtleBot rotates on the spot
         twist.linear.x = 0.0
         # set the direction to rotate
-        twist.angular.z = c_change_dir * rotatechange
+        twist.angular.z = c_change_dir * rotatechange * 2
         # start rotation
         self.publisher.publish(twist)
         self.isSpinning = True
 
         # we will use the c_dir_diff variable to see if we can stop rotating
         c_dir_diff = c_change_dir
-        # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+        #self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
         # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
         # becomes -1.0, and vice versa
         while(c_change_dir * c_dir_diff > 0):
             # allow the callback functions to run
+            # if self.angularspeed == 0:
+            #     break
             rclpy.spin_once(self)
             current_yaw = self.yaw
             # convert the current yaw to complex form
             c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-            # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
+            self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
+            self.get_logger().info('Target Yaw: %f' %math.degrees(target_yaw))
             # get difference in angle between current and target
             c_change = c_target_yaw / c_yaw
             # get the sign to see if we can stop
             c_dir_diff = np.sign(c_change.imag)
-            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
+            #self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
 
         # set the rotation speed to 0
         twist.angular.z = 0.0
@@ -359,6 +402,7 @@ class Occupy(Node):
         self.isSpinning = False
 
     def listener_callback(self, msg):
+        # print('callback')
         # create numpy array
         occdata = np.array(msg.data)
         # compute histogram to identify bins with -1, values between 0 and below 50, 
@@ -376,9 +420,9 @@ class Occupy(Node):
         # find transform to obtain base_link coordinates in the map frame
         # lookup_transform(target_frame, source_frame, time)
         try:
-            trans = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time())
+            trans = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time(),timeout=rclpy.duration.Duration(seconds=0.01))
         except (LookupException, ConnectivityException, ExtrapolationException) as e:
-            self.get_logger().info(e)
+            print(e)
             self.stopbot()
             return
             
@@ -406,10 +450,22 @@ class Occupy(Node):
         odata[grid_y][grid_x] = 0
         target = self.target
         solgrid = []
-        if not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit:
+        if self.shouldScan and (not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit) and (not self.isSpinning):
             if self.path:
-                self.target = self.path.pop(0)
+                if not any([odata[round((self.currentFrontier[0]-map_origin.y)/map_res)+x[0],round((self.currentFrontier[1]-map_origin.x)/map_res)+x[1]] == 1 for x in ((1,0),(0,1),(-1,0),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1))]):
+                    self.path = []
+                else:
+                    solgrid = [(round((x[0]-map_origin.y)/map_res),round((x[1]-map_origin.x)/map_res)) for x in self.path]
+                    for x in range(1,len(solgrid)):
+                        print(x)
+                        try:
+                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
+                                self.path = self.path[-x:]
+                        except:
+                            continue
+                    self.target = self.path.pop(0)
             else:
+                self.path = []
                 self.stopbot()
                 # if target:
                 #     self.pastTargets.append(self.target)
@@ -422,98 +478,110 @@ class Occupy(Node):
                 print(midpoint_positions)
                 midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
                 if midpoint_positions:
+                    self.doneMapping = False
                     target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
+                    self.currentFrontier = target
                     goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
-                    turtlbot_grid = round(0.3/map_res)
+                    turtlbot_grid = round(0.15/map_res)
                     solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    for x in range(1,len(solgrid)-1):
+                        print(x)
+                        try:
+                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
+                                solgrid = solgrid[-x:]
+                        except:
+                            continue
+                    print(solgrid)
+                    
                     for i in solgrid:
                         self.path.append( (i[0] * map_res + map_origin.y,i[1] * map_res+map_origin.x) )
                     self.target = self.path.pop(0)
+                    self.shouldScan = False
+                    time.sleep(0.01)
                     print(solgrid)
                     print(self.target)
                     #self.startTime = time.time()
                 else:
+                    self.doneMapping = True
                     print("no frontier found")
-        if self.target:
-            target_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
+        self.doneMapping = True
         
-        else:
-            target_grid = []
-        
-        if target_grid:
-            odata[target_grid[0],target_grid[1]] = 0
-        if solgrid:
-            for i in solgrid:
-                odata[i[0],i[1]] = 0
-                    
-        # create image from 2D array using PIL
-        img = Image.fromarray(odata)
-        # find center of image
-        i_centerx = iwidth/2
-        i_centery = iheight/2
-        # find how much to shift the image to move grid_x and grid_y to center of image
-        shift_x = round(grid_x - i_centerx)
-        shift_y = round(grid_y - i_centery)
-        # self.get_logger().info('Shift Y: %i Shift X: %i' % (shift_y, shift_x))
-
-        # pad image to move robot position to the center
-        # adapted from https://note.nkmk.me/en/python-pillow-add-margin-expand-canvas/ 
-        left = 0
-        right = 0
-        top = 0
-        bottom = 0
-        if shift_x > 0:
-            # pad right margin
-            right = 2 * shift_x
-        else:
-            # pad left margin
-            left = 2 * (-shift_x)
+        if self.doneMapping:
+            goal_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
+            odata[goal_grid[0],goal_grid[1]] = 0
+            img = Image.fromarray(odata)
+            # find center of image
+            i_centerx = iwidth/2
+            i_centery = iheight/2
+            # find how much to shift the image to move grid_x and grid_y to center of image
+            shift_x = round(grid_x - i_centerx)
+            shift_y = round(grid_y - i_centery)
+            # self.get_logger().info('Shift Y: %i Shift X: %i' % (shift_y, shift_x))
+    
+            # pad image to move robot position to the center
+            # adapted from https://note.nkmk.me/en/python-pillow-add-margin-expand-canvas/ 
+            left = 0
+            right = 0
+            top = 0
+            bottom = 0
+            if shift_x > 0:
+                # pad right margin
+                right = 2 * shift_x
+            else:
+                # pad left margin
+                left = 2 * (-shift_x)
+                
+            if shift_y > 0:
+                # pad bottom margin
+                bottom = 2 * shift_y
+            else:
+                # pad top margin
+                top = 2 * (-shift_y)
+                
+            # create new image
+            new_width = iwidth + right + left
+            new_height = iheight + top + bottom
+            img_transformed = Image.new(img.mode, (new_width, new_height), map_bg_color)
+            img_transformed.paste(img, (left, top))
+    
+            # rotate by 90 degrees so that the forward direction is at the top of the image
+            rotated = img_transformed.rotate(np.degrees(yaw)-90, expand=True, fillcolor=map_bg_color)
+            rotated.save('Map.png',cmap = 'gray',origin = 'lower')
+    
+            # show the image using grayscale map
+            # plt.imshow(img, cmap='gray', origin='lower')
+            # plt.imshow(img_transformed, cmap='gray', origin='lower')
+            plt.imshow(rotated, cmap='gray', origin='lower')
+            plt.draw_all()
+            # pause to make sure the plot gets created
+            plt.pause(0.00000000001)
             
-        if shift_y > 0:
-            # pad bottom margin
-            bottom = 2 * shift_y
-        else:
-            # pad top margin
-            top = 2 * (-shift_y)
-            
-        # create new image
-        new_width = iwidth + right + left
-        new_height = iheight + top + bottom
-        img_transformed = Image.new(img.mode, (new_width, new_height), map_bg_color)
-        img_transformed.paste(img, (left, top))
-
-        # rotate by 90 degrees so that the forward direction is at the top of the image
-        rotated = img_transformed.rotate(np.degrees(yaw)-90, expand=True, fillcolor=map_bg_color)
-
-        # show the image using grayscale map
-        # plt.imshow(img, cmap='gray', origin='lower')
-        # plt.imshow(img_transformed, cmap='gray', origin='lower')
-        plt.imshow(rotated, cmap='gray', origin='lower')
-        plt.draw_all()
-        # pause to make sure the plot gets created
-        plt.pause(0.00000000001)
-        
     def movetotarget(self, target):
         if target:
             if (self.isCrashing):
                 # Handles crash avoidance
-                print("Avoiding crash")
+                # print("Avoiding crash")
                 self.stopbot()
                 closestAngle = np.nanargmin(self.laser_range)
                 leftFound = False
                 rightFound = False
                 for i in range(0,180):
                     anglePos = (closestAngle +i)%360
-                    if (not rightFound) and self.laser_range[anglePos] > stop_distance + 0.2:
-                        posDisplace = i
-                        rightFound = True
-                    angleNeg = (closestAngle - i)%360
-                    if (not leftFound) and self.laser_range[angleNeg]> stop_distance + 0.2:
-                        negDisplace = i
-                        leftFound = True
-                    if leftFound and rightFound:
-                        break
-                print(posDisplace, negDisplace)
+                    try:
+                        if (not rightFound) and self.laser_range[anglePos] > stop_distance + 0.3:
+                            posDisplace = i
+                            rightFound = True
+                        angleNeg = (closestAngle - i)%360
+                        if (not leftFound) and self.laser_range[angleNeg]> stop_distance + 0.3:
+                            negDisplace = i
+                            leftFound = True
+                        if leftFound and rightFound:
+                            break
+                    except:
+                        continue
+                if not (leftFound and rightFound):
+                    posDisplace,negDisplace = 180,180
+                # print(posDisplace, negDisplace)
                 posAngle = (closestAngle + posDisplace)%360
                 negAngle = (closestAngle - negDisplace)%360
                 if posAngle > 180:
@@ -522,21 +590,24 @@ class Occupy(Node):
                     negAngle = negAngle - 360
                 
                 if posAngle + negAngle < 0:
-                    destinationAngle = posAngle + 30
+                    destinationAngle = posAngle + 40
                 else:
-                    destinationAngle = negAngle - 30
-                
+                    destinationAngle = negAngle - 40
+
                 self.rotatebot(destinationAngle)
-                twist = Twist()
-                twist.linear.x = 0.3
-                twist.angular.z = 0.0
-                self.publisher.publish(twist)
-                time.sleep(1)
+                rclpy.spin_once(self)
+                if not self.isCrashing:
+                    twist = Twist()
+                    twist.linear.x = 0.2
+                    twist.angular.z = 0.0
+                    self.publisher.publish(twist)
+                    print("MOVING\n\n\n\n\n")
+                    time.sleep(1.2)
                 self.stopbot()          
             else:
                 # Handles normal movement to target
-                print("target acquired")
-                print(target)
+                # print("target acquired")
+                # print(target)
                 angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
                 if (target[1]-self.x) < 0:
                     if (target[0]-self.y) > 0:
@@ -546,11 +617,10 @@ class Occupy(Node):
                 
                 if abs(angle) > 0.2:
                     self.stopbot()
-                    self.rotatebot(np.degrees(angle))
-                
-                print('Start moving')
+                    self.rotatebot(np.degrees(angle))                
+                # print('Start moving')
                 twist = Twist()
-                twist.linear.x = 0.1
+                twist.linear.x = 0.2
                 twist.angular.z = 0.0
                 self.publisher.publish(twist)
         rclpy.spin_once(self) #get the lidar data to prevent crash
@@ -560,17 +630,21 @@ class Occupy(Node):
         rclpy.spin_once(self)
         print(target)
         while (True):
-            print('moving')
+            # print('starting')
+            print(target)
             rclpy.spin_once(self)
             try:
                 target = self.target
                 if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit:
-                    print("Target reached")
+                    self.shouldScan = True
+                    # print("Target reached")
                     self.stopbot()
                 else:
+                    # print('moving')
                     self.movetotarget(target)
             except Exception as e:
                 print(e)
+                print('a')
 
 
 def main(args=None):
