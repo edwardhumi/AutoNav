@@ -27,12 +27,14 @@ import heapq
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 5
-proximity_limit = 0.24
-rotatechange = 0.1
-stop_distance = 0.25
+threshold = 8
+proximity_limit = 0.2
+rotatechange = 0.25
+stop_distance = 0.2
 front_angle = 30
+precission = 0.15
 angleChange = 10
+testing = True
 #waitTime = 60
 
 class Cell:
@@ -47,19 +49,23 @@ def distance(a,b):
     return ((a.pos[0]-b.pos[0])**2 + (a.pos[1]-b.pos[1])**2)**0.5
     
 def astar(maze,start,stop,step):
-    print('A* Running')
+    print('B* Running')
     startCell = Cell(None,start)
     endCell = Cell(None,stop)
     if distance(startCell,endCell) < 1.8 * step:
         return[stop]
     def wallinGrid(pos):
         size = round(step/2)
+        count = 0
         for i in range(-size,size):
             for j in range(-size,size):
+                if count >= size * 0.8:
+                    return True
                 if pos[0]+i > len(maze)-1 or pos[1] + j > len(maze[0]) -1:
+                    count += 1
                     continue
                 if maze[pos[0]+i,pos[1]+j] == 3:
-                    return True
+                    count += 1
         if maze[pos[0],pos[1]] == 3:
              return True
         return False
@@ -303,7 +309,8 @@ class Occupy(Node):
         self.path = []
         self.currentFrontier = []
         self.shouldScan = False
-        self.doneMapping = False
+        self.doneMapping = True
+        self.mapgrid= []
         # self.angularspeed = 0
         #self.startTime = time.time()
         #self.pastTargets = []
@@ -349,6 +356,8 @@ class Occupy(Node):
         
     def rotatebot(self, rot_angle):
         self.get_logger().info('In rotatebot')
+        # if rot_angle < 20:
+        #     rotatechange = 0.1
         # create Twist object
         twist = Twist()
         
@@ -369,7 +378,7 @@ class Occupy(Node):
         # set linear speed to zero so the TurtleBot rotates on the spot
         twist.linear.x = 0.0
         # set the direction to rotate
-        twist.angular.z = c_change_dir * rotatechange * 2
+        twist.angular.z = c_change_dir * rotatechange 
         # start rotation
         self.publisher.publish(twist)
         self.isSpinning = True
@@ -482,8 +491,9 @@ class Occupy(Node):
                     target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
                     self.currentFrontier = target
                     goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
-                    turtlbot_grid = round(0.15/map_res)
+                    turtlbot_grid = round(precission/map_res)
                     solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    self.mapgrid = solgrid
                     for x in range(1,len(solgrid)-1):
                         print(x)
                         try:
@@ -504,8 +514,11 @@ class Occupy(Node):
                 else:
                     self.doneMapping = True
                     print("no frontier found")
-        self.doneMapping = True
-        
+        if testing:
+            self.doneMapping = True
+        # if self.mapgrid:
+        #     for i in self.mapgrid:
+        #         odata[i[0],i[1]] = 0
         if self.doneMapping:
             goal_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
             odata[goal_grid[0],goal_grid[1]] = 0
@@ -568,11 +581,11 @@ class Occupy(Node):
                 for i in range(0,180):
                     anglePos = (closestAngle +i)%360
                     try:
-                        if (not rightFound) and self.laser_range[anglePos] > stop_distance + 0.3:
+                        if (not rightFound) and self.laser_range[anglePos] > 0.3:
                             posDisplace = i
                             rightFound = True
                         angleNeg = (closestAngle - i)%360
-                        if (not leftFound) and self.laser_range[angleNeg]> stop_distance + 0.3:
+                        if (not leftFound) and self.laser_range[angleNeg]>0.3:
                             negDisplace = i
                             leftFound = True
                         if leftFound and rightFound:
@@ -582,17 +595,17 @@ class Occupy(Node):
                 if not (leftFound and rightFound):
                     posDisplace,negDisplace = 180,180
                 # print(posDisplace, negDisplace)
-                posAngle = (closestAngle + posDisplace)%360
-                negAngle = (closestAngle - negDisplace)%360
+                posAngle = (closestAngle + posDisplace)%360 + 30
+                negAngle = (closestAngle - negDisplace)%360 - 30
                 if posAngle > 180:
                     posAngle = posAngle - 360
                 if negAngle > 180:
                     negAngle = negAngle - 360
                 
                 if posAngle + negAngle < 0:
-                    destinationAngle = posAngle + 40
+                    destinationAngle = posAngle 
                 else:
-                    destinationAngle = negAngle - 40
+                    destinationAngle = negAngle 
 
                 self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
@@ -602,7 +615,7 @@ class Occupy(Node):
                     twist.angular.z = 0.0
                     self.publisher.publish(twist)
                     print("MOVING\n\n\n\n\n")
-                    time.sleep(1.2)
+                    time.sleep(1)
                 self.stopbot()          
             else:
                 # Handles normal movement to target
