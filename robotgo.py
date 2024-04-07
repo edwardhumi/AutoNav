@@ -30,8 +30,8 @@ map_bg_color = 1
 threshold = 8
 proximity_limit = 0.2
 rotatechange = 0.25
-stop_distance = 0.2
-front_angle = 30
+stop_distance = 0.25
+front_angle = 40
 precission = 0.15
 angleChange = 10
 testing = True
@@ -59,7 +59,7 @@ def astar(maze,start,stop,step):
         count = 0
         for i in range(-size,size):
             for j in range(-size,size):
-                if count >= size * 0.8:
+                if count >= 0.1 * size:
                     return True
                 if pos[0]+i > len(maze)-1 or pos[1] + j > len(maze[0]) -1:
                     count += 1
@@ -356,8 +356,10 @@ class Occupy(Node):
         
     def rotatebot(self, rot_angle):
         self.get_logger().info('In rotatebot')
-        # if rot_angle < 20:
-        #     rotatechange = 0.1
+        if rot_angle < 20:
+            rotatechange = 0.1
+        else:
+            rotatechange = 0.25
         # create Twist object
         twist = Twist()
         
@@ -465,6 +467,7 @@ class Occupy(Node):
                     self.path = []
                 else:
                     solgrid = [(round((x[0]-map_origin.y)/map_res),round((x[1]-map_origin.x)/map_res)) for x in self.path]
+                    
                     for x in range(1,len(solgrid)):
                         print(x)
                         try:
@@ -472,6 +475,7 @@ class Occupy(Node):
                                 self.path = self.path[-x:]
                         except:
                             continue
+                
                     self.target = self.path.pop(0)
             else:
                 self.path = []
@@ -494,6 +498,7 @@ class Occupy(Node):
                     turtlbot_grid = round(precission/map_res)
                     solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
                     self.mapgrid = solgrid
+                    
                     for x in range(1,len(solgrid)-1):
                         print(x)
                         try:
@@ -501,6 +506,7 @@ class Occupy(Node):
                                 solgrid = solgrid[-x:]
                         except:
                             continue
+                
                     print(solgrid)
                     
                     for i in solgrid:
@@ -576,46 +582,69 @@ class Occupy(Node):
                 # print("Avoiding crash")
                 self.stopbot()
                 closestAngle = np.nanargmin(self.laser_range)
+                # for i in range(len(self.laser_range)):
+                #     print(i, self.laser_range[i])
+                # print('closest Angle = {}'.format(closestAngle))
                 leftFound = False
                 rightFound = False
                 for i in range(0,180):
                     anglePos = (closestAngle +i)%360
                     try:
-                        if (not rightFound) and self.laser_range[anglePos] > 0.3:
+                        if (not rightFound) and self.laser_range[anglePos] > 0.2:
                             posDisplace = i
                             rightFound = True
                         angleNeg = (closestAngle - i)%360
-                        if (not leftFound) and self.laser_range[angleNeg]>0.3:
+                        if (not leftFound) and self.laser_range[angleNeg]>0.2:
                             negDisplace = i
                             leftFound = True
                         if leftFound and rightFound:
                             break
                     except:
                         continue
-                if not (leftFound and rightFound):
-                    posDisplace,negDisplace = 180,180
+                if not leftFound:
+                    negDisplace = 180
+                if not rightFound:
+                    posDisplace = 180
                 # print(posDisplace, negDisplace)
-                posAngle = (closestAngle + posDisplace)%360 + 30
-                negAngle = (closestAngle - negDisplace)%360 - 30
+                posAngle = (closestAngle + posDisplace)%360
+                negAngle = (closestAngle - negDisplace)%360
+                if posDisplace + negDisplace > 30:
+                    offset = 30
+                else:
+                    offset = 40
                 if posAngle > 180:
                     posAngle = posAngle - 360
                 if negAngle > 180:
                     negAngle = negAngle - 360
                 
-                if posAngle + negAngle < 0:
-                    destinationAngle = posAngle 
+                if posAngle + negAngle > 0:
+                    destinationAngle = posAngle + offset
                 else:
-                    destinationAngle = negAngle 
-
-                self.rotatebot(destinationAngle)
+                    destinationAngle = negAngle -offset
+                # print("Pos Angle = {}, negAngle = {}".format(posAngle,negAngle))
+                # print("destination angle: ",destinationAngle)
+                while self.isCrashing:
+                    rclpy.spin_once(self)
+                    self.stop_distance = 0.4
+                    twast = Twist()
+                    twast.linear.x = 0.0
+                    angular = 0.2
+                    if posAngle + negAngle > 0:
+                        angular = -angular
+                    twast.angular.z = angular
+                    self.publisher.publish(twast)
+                self.stopbot()
+                self.stop_distance = 0.25
+                # self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
+                # self.isCrashing = False
                 if not self.isCrashing:
                     twist = Twist()
                     twist.linear.x = 0.2
                     twist.angular.z = 0.0
                     self.publisher.publish(twist)
                     print("MOVING\n\n\n\n\n")
-                    time.sleep(1)
+                    time.sleep(0.8)
                 self.stopbot()          
             else:
                 # Handles normal movement to target
@@ -628,7 +657,7 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                if abs(angle) > 0.2:
+                if abs(np.degrees(angle)) > 5:
                     self.stopbot()
                     self.rotatebot(np.degrees(angle))                
                 # print('Start moving')
@@ -650,10 +679,10 @@ class Occupy(Node):
                 target = self.target
                 if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit:
                     self.shouldScan = True
-                    # print("Target reached")
+                        # print("Target reached")
                     self.stopbot()
                 else:
-                    # print('moving')
+                        # print('moving')
                     self.movetotarget(target)
             except Exception as e:
                 print(e)
