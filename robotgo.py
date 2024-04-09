@@ -30,11 +30,12 @@ map_bg_color = 1
 threshold = 8
 proximity_limit = 0.2
 rotatechange = 0.25
-stop_distance = 0.25
-front_angle = 40
-precission = 0.15
+stop_distance = 0.23
+front_angle = 35
+precission = 0.3
 angleChange = 10
-testing = True
+testing = False
+    
 #waitTime = 60
 
 class Cell:
@@ -48,11 +49,14 @@ class Cell:
 def distance(a,b):
     return ((a.pos[0]-b.pos[0])**2 + (a.pos[1]-b.pos[1])**2)**0.5
     
-def astar(maze,start,stop,step):
+def astar(maze,start,stop,orstep,callback):
     print('B* Running')
+    startTime = time.time()
+    step = orstep
     startCell = Cell(None,start)
     endCell = Cell(None,stop)
-    if distance(startCell,endCell) < 1.8 * step:
+    goaldis = 1.5
+    if distance(startCell,endCell) < goaldis* step:
         return[stop]
     def wallinGrid(pos):
         size = round(step/2)
@@ -66,7 +70,7 @@ def astar(maze,start,stop,step):
                     continue
                 if maze[pos[0]+i,pos[1]+j] == 3:
                     count += 1
-        if maze[pos[0],pos[1]] == 3:
+        if maze[pos[0],pos[1]] in (1,3):
              return True
         return False
         
@@ -77,15 +81,27 @@ def astar(maze,start,stop,step):
     open_list = {}
     openPos = []
     closed_list = []
-    
+    reset = True
     addToOpen(startCell)
 
     while open_list:
+        rclpy.spin_once(callback)
+        if time.time() - startTime > 15 and reset:
+            print('wtf')        
+            reset = False
+            open_list = {}
+            addToOpen(startCell)
+            # step = round(0.2 * orstep)
+            print('new step', step)
+            print(start,stop,step)
+            goaldis *= 2
+        if time.time() - startTime > 30:
+            return [startCell.pos]
         currentNode = open_list.pop(min(open_list.keys()))
         openPos.pop(openPos.index(currentNode.pos))
         closed_list.append(currentNode)
-        
-        if distance(currentNode,endCell) <= 1.8 * step:
+
+        if distance(currentNode,endCell) <= goaldis * step:
             path = []
             current = currentNode
             while current is not None:
@@ -127,17 +143,18 @@ def Adj(p,tmap):
     return ans
 
 def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, resolution):
+    # return False 
     margin_grid = (int)(0.1/resolution)
     #print(margin_grid)
     if (target_y_grid == curr_y_grid):
         for x in range (curr_x_grid, target_x_grid, 1):
             y = target_y_grid
-            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] in (1,3)) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] in (1,3))):
                 return False    # meet a wall
     elif (target_x_grid == curr_x_grid):
         for y in range (curr_y_grid, target_y_grid, 1):
             x = target_x_grid
-            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] == 3) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] == 3)):
+            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] in (1,3)) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] in (1,3))):
                 return False    # meet a wall
     else:
         gradient = (float)(target_y_grid - curr_y_grid)/(float)(target_x_grid - curr_x_grid)
@@ -208,6 +225,7 @@ def findfronteirs(tmap,posi):
         p = qm.pop(0)
 
         if mark(p) == 'Map-Close-List':
+            print('I am running')
             continue
         
         if isFronteir(p):
@@ -356,10 +374,13 @@ class Occupy(Node):
         
     def rotatebot(self, rot_angle):
         self.get_logger().info('In rotatebot')
-        if rot_angle < 20:
+        if abs(rot_angle) < 5:
+            rotatechange = 0.05
+        elif abs(rot_angle) < 20:
             rotatechange = 0.1
         else:
-            rotatechange = 0.25
+            rotatechange = 0.2
+        
         # create Twist object
         twist = Twist()
         
@@ -470,6 +491,7 @@ class Occupy(Node):
                     
                     for x in range(1,len(solgrid)):
                         print(x)
+                        print('8')
                         try:
                             if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
                                 self.path = self.path[-x:]
@@ -496,7 +518,7 @@ class Occupy(Node):
                     self.currentFrontier = target
                     goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
                     turtlbot_grid = round(precission/map_res)
-                    solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid))
+                    solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid,self))
                     self.mapgrid = solgrid
                     
                     for x in range(1,len(solgrid)-1):
@@ -525,7 +547,7 @@ class Occupy(Node):
         # if self.mapgrid:
         #     for i in self.mapgrid:
         #         odata[i[0],i[1]] = 0
-        if self.doneMapping:
+        if self.doneMapping and self.target:
             goal_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
             odata[goal_grid[0],goal_grid[1]] = 0
             img = Image.fromarray(odata)
@@ -590,11 +612,11 @@ class Occupy(Node):
                 for i in range(0,180):
                     anglePos = (closestAngle +i)%360
                     try:
-                        if (not rightFound) and self.laser_range[anglePos] > 0.2:
+                        if (not rightFound) and self.laser_range[anglePos] > 0.3:
                             posDisplace = i
                             rightFound = True
                         angleNeg = (closestAngle - i)%360
-                        if (not leftFound) and self.laser_range[angleNeg]>0.2:
+                        if (not leftFound) and self.laser_range[angleNeg]>0.3:
                             negDisplace = i
                             leftFound = True
                         if leftFound and rightFound:
@@ -657,7 +679,8 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                if abs(np.degrees(angle)) > 5:
+                print(np.degrees(angle))                
+                if abs(np.degrees(angle)) > 10:
                     self.stopbot()
                     self.rotatebot(np.degrees(angle))                
                 # print('Start moving')
