@@ -27,112 +27,20 @@ import heapq
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 8
-proximity_limit = 0.2
+threshold = 10  
+proximity_limit = 0.35
 rotatechange = 0.25
-stop_distance = 0.23
+stop_distance = 0.22
 front_angle = 35
-precission = 0.3
+precission = 0.15
 angleChange = 10
-testing = False
+testing = True
     
 #waitTime = 60
 
-class Cell:
-    def __init__(self,parent,pos):
-        self.parent = parent
-        self.pos = pos
-        self.f = 0
-        self.g = 0
-        self.h= 0
-        
-def distance(a,b):
-    return ((a.pos[0]-b.pos[0])**2 + (a.pos[1]-b.pos[1])**2)**0.5
-    
-def astar(maze,start,stop,orstep,callback):
-    print('B* Running')
-    startTime = time.time()
-    step = orstep
-    startCell = Cell(None,start)
-    endCell = Cell(None,stop)
-    goaldis = 1.5
-    if distance(startCell,endCell) < goaldis* step:
-        return[stop]
-    def wallinGrid(pos):
-        size = round(step/2)
-        count = 0
-        for i in range(-size,size):
-            for j in range(-size,size):
-                if count >= 0.1 * size:
-                    return True
-                if pos[0]+i > len(maze)-1 or pos[1] + j > len(maze[0]) -1:
-                    count += 1
-                    continue
-                if maze[pos[0]+i,pos[1]+j] == 3:
-                    count += 1
-        if maze[pos[0],pos[1]] in (1,3):
-             return True
-        return False
-        
-    def addToOpen(cell):
-        open_list[cell.f] = cell
-        openPos.append(cell.pos)
-        
-    open_list = {}
-    openPos = []
-    closed_list = []
-    reset = True
-    addToOpen(startCell)
 
-    while open_list:
-        rclpy.spin_once(callback)
-        if time.time() - startTime > 15 and reset:
-            print('wtf')        
-            reset = False
-            open_list = {}
-            addToOpen(startCell)
-            # step = round(0.2 * orstep)
-            print('new step', step)
-            print(start,stop,step)
-            goaldis *= 2
-        if time.time() - startTime > 30:
-            return [startCell.pos]
-        currentNode = open_list.pop(min(open_list.keys()))
-        openPos.pop(openPos.index(currentNode.pos))
-        closed_list.append(currentNode)
 
-        if distance(currentNode,endCell) <= goaldis * step:
-            path = []
-            current = currentNode
-            while current is not None:
-                path.append(current.pos)
-                current = current.parent
-            return path[::-1]
-    
-        x,y = currentNode.pos[0],currentNode.pos[1]
-        for i in range(-1,2):
-            for j in range(-1,2):
-                a = i * step
-                b = j * step
-                if (i == 0 and j == 0) or (not (0 <= x + a < len(maze))) or (not (0 <= y + b < len(maze[0]) -1)):
-                    continue
-                if wallinGrid((x+a,y+b)): # or any([maze[z[0],z[1]] == 3 for z in Adj((x+i,y+j),maze)])
-                    continue
-                newNode = Cell(currentNode, (x+a,y+b))
-                if newNode in closed_list:
-                    continue
-                newNode.g = currentNode.g + distance(currentNode,newNode)
-                newNode.h = distance(newNode,endCell)
-                newNode.f = newNode.g + newNode.h
-
-                
-                if newNode.pos in openPos:
-                    for item in open_list.items():
-                        if item == newNode.pos and newNode.g > item.g:
-                            continue             
-                addToOpen(newNode)
             
-
 def Adj(p,tmap):
     ans = []
     for i in range(-1,2):
@@ -171,6 +79,44 @@ def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_gr
                 return False    # meet a wall
     return True
 
+# def bresenham_line(x0, y0, x1, y1):
+#     """Bresenham's line algorithm"""
+#     points = []
+#     dx = abs(x1 - x0)
+#     dy = abs(y1 - y0)
+#     x, y = x0, y0
+#     sx = 1 if x0 < x1 else -1
+#     sy = 1 if y0 < y1 else -1
+
+#     if dx > dy:
+#         err = dx / 2.0
+#         while x != x1:
+#             points.append((x, y))
+#             err -= dy
+#             if err < 0:
+#                 y += sy
+#                 err += dx
+#             x += sx
+#     else:
+#         err = dy / 2.0
+#         while y != y1:
+#             points.append((x, y))
+#             err -= dx
+#             if err < 0:
+#                 x += sx
+#                 err += dy
+#             y += sy
+
+#     points.append((x, y))
+#     return points
+
+# def ableToTravel(map_array, start, end):
+#     points = bresenham_line(start[1], start[0], end[1], end[0])
+#     for point in points:
+#         row, col = point
+#         if map_array[row][col] == 3:  # Check if the cell is non-traversable
+#             return False
+#     return True
         
 
 def median(arr):
@@ -480,76 +426,16 @@ class Occupy(Node):
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
-        target = self.target
-        solgrid = []
-        if self.shouldScan and (not target or abs(target[1]-cur_pos.x) + abs(target[0]-cur_pos.y) < proximity_limit) and (not self.isSpinning):
-            if self.path:
-                if not any([odata[round((self.currentFrontier[0]-map_origin.y)/map_res)+x[0],round((self.currentFrontier[1]-map_origin.x)/map_res)+x[1]] == 1 for x in ((1,0),(0,1),(-1,0),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1))]):
-                    self.path = []
-                else:
-                    solgrid = [(round((x[0]-map_origin.y)/map_res),round((x[1]-map_origin.x)/map_res)) for x in self.path]
-                    
-                    for x in range(1,len(solgrid)):
-                        print(x)
-                        print('8')
-                        try:
-                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
-                                self.path = self.path[-x:]
-                        except:
-                            continue
-                
-                    self.target = self.path.pop(0)
-            else:
-                self.path = []
-                self.stopbot()
-                # if target:
-                #     self.pastTargets.append(self.target)
-                # should only search frontier if there is no current target or have reached the current target
-                print("Frontier Positions")
-                frontier_positions = findfronteirs(odata,(grid_y,grid_x))
-                midpoint_positions = []
-                for i in frontier_positions:
-                    midpoint_positions.append(median(i))
-                print(midpoint_positions)
-                midpoint_positions = sortpos(midpoint_positions,grid_y,grid_x)
-                if midpoint_positions:
-                    self.doneMapping = False
-                    target = [midpoint_positions[0][0]*map_res+map_origin.y,midpoint_positions[0][1]*map_res+map_origin.x]
-                    self.currentFrontier = target
-                    goal_grid = (round((target[0]-map_origin.y)/map_res),round((target[1]-map_origin.x)/map_res))
-                    turtlbot_grid = round(precission/map_res)
-                    solgrid = (astar(odata,(grid_y,grid_x),goal_grid,turtlbot_grid,self))
-                    self.mapgrid = solgrid
-                    
-                    for x in range(1,len(solgrid)-1):
-                        print(x)
-                        try:
-                            if ableToTravel(odata,grid_x,grid_y,solgrid[-x][1],solgrid[-x][0],map_res):
-                                solgrid = solgrid[-x:]
-                        except:
-                            continue
-                
-                    print(solgrid)
-                    
-                    for i in solgrid:
-                        self.path.append( (i[0] * map_res + map_origin.y,i[1] * map_res+map_origin.x) )
-                    self.target = self.path.pop(0)
-                    self.shouldScan = False
-                    time.sleep(0.01)
-                    print(solgrid)
-                    print(self.target)
-                    #self.startTime = time.time()
-                else:
-                    self.doneMapping = True
-                    print("no frontier found")
-        if testing:
-            self.doneMapping = True
-        # if self.mapgrid:
-        #     for i in self.mapgrid:
-        #         odata[i[0],i[1]] = 0
-        if self.doneMapping and self.target:
-            goal_grid = (round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res))
-            odata[goal_grid[0],goal_grid[1]] = 0
+        frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+        midpoint_positions = []
+        for i in frontier_positions:
+            midpoint_positions.append(median(i))
+        for x,y in midpoint_positions:
+            odata[x,y] = 0
+        
+        
+       
+        if True:
             img = Image.fromarray(odata)
             # find center of image
             i_centerx = iwidth/2
@@ -604,59 +490,72 @@ class Occupy(Node):
                 # print("Avoiding crash")
                 self.stopbot()
                 closestAngle = np.nanargmin(self.laser_range)
+                degreeNum = len(self.laser_range)
+                degreeNum = 360
+                
                 # for i in range(len(self.laser_range)):
                 #     print(i, self.laser_range[i])
-                # print('closest Angle = {}'.format(closestAngle))
+                
+                print('closest Angle = {}'.format(closestAngle))
                 leftFound = False
                 rightFound = False
-                for i in range(0,180):
-                    anglePos = (closestAngle +i)%360
+                for i in range(0,round(degreeNum/2)):
+                    anglePos = (closestAngle +i)%degreeNum
+                    angleNeg = (closestAngle- i)%degreeNum
                     try:
-                        if (not rightFound) and self.laser_range[anglePos] > 0.3:
+                        
+                        print(anglePos,self.laser_range[anglePos] - self.laser_range[anglePos-1])
+                        print(angleNeg,self.laser_range[angleNeg] - self.laser_range[angleNeg+1])
+                        if (not rightFound) and abs(self.laser_range[anglePos]) > 0.35:
                             posDisplace = i
                             rightFound = True
-                        angleNeg = (closestAngle - i)%360
-                        if (not leftFound) and self.laser_range[angleNeg]>0.3:
+                            print('aaa')
+                            print(anglePos)
+                        angleNeg = (closestAngle - i)%degreeNum
+                        if (not leftFound) and abs(self.laser_range[angleNeg]) > 0.35:
                             negDisplace = i
                             leftFound = True
+                            print('bbb')
+                            print(angleNeg)
                         if leftFound and rightFound:
                             break
                     except:
                         continue
                 if not leftFound:
-                    negDisplace = 180
+                    negDisplace = round(degreeNum/2)
                 if not rightFound:
-                    posDisplace = 180
-                # print(posDisplace, negDisplace)
-                posAngle = (closestAngle + posDisplace)%360
-                negAngle = (closestAngle - negDisplace)%360
-                if posDisplace + negDisplace > 30:
-                    offset = 30
+                    posDisplace = round(degreeNum/2)
+                print(posDisplace,negDisplace)
+                posAngle = (closestAngle + posDisplace)%degreeNum
+                negAngle = (closestAngle - negDisplace)%degreeNum
+                print(posAngle,negAngle)
+                if posAngle > degreeNum/2:
+                    posAngle = posAngle - degreeNum
+                if negAngle > degreeNum/2:
+                    negAngle = negAngle - degreeNum
+                print(posAngle,negAngle)
+                if posAngle + negAngle < 0:
+                    print('LEFT\n\n\n\n')
                 else:
-                    offset = 40
-                if posAngle > 180:
-                    posAngle = posAngle - 360
-                if negAngle > 180:
-                    negAngle = negAngle - 360
+                    print('RIGHT\n\n\n\n')
                 
-                if posAngle + negAngle > 0:
-                    destinationAngle = posAngle + offset
-                else:
-                    destinationAngle = negAngle -offset
                 # print("Pos Angle = {}, negAngle = {}".format(posAngle,negAngle))
                 # print("destination angle: ",destinationAngle)
                 while self.isCrashing:
                     rclpy.spin_once(self)
                     self.stop_distance = 0.4
+                    self.front_angle = 30
                     twast = Twist()
                     twast.linear.x = 0.0
-                    angular = 0.2
                     if posAngle + negAngle > 0:
-                        angular = -angular
+                        angular = -0.2
+                    else:
+                        angular = 0.2
                     twast.angular.z = angular
                     self.publisher.publish(twast)
                 self.stopbot()
                 self.stop_distance = 0.25
+                self.front_angle = 35
                 # self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
                 # self.isCrashing = False
