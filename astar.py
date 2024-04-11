@@ -28,18 +28,15 @@ import heapq
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 10  
-proximity_limit = 0.35
+proximity_limit = 0.2
 rotatechange = 0.25
-stop_distance = 0.22
+stop_distance = 0.25
 front_angle = 35
 precission = 0.15
 angleChange = 10
 testing = True
     
 #waitTime = 60
-
-
-
             
 def Adj(p,tmap):
     ans = []
@@ -50,88 +47,11 @@ def Adj(p,tmap):
             ans.append((p[0]+i,p[1]+j))
     return ans
 
-def ableToTravel(map_odata, curr_x_grid, curr_y_grid, target_x_grid, target_y_grid, resolution):
-    # return False 
-    margin_grid = (int)(0.1/resolution)
-    #print(margin_grid)
-    if (target_y_grid == curr_y_grid):
-        for x in range (curr_x_grid, target_x_grid, 1):
-            y = target_y_grid
-            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] in (1,3)) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] in (1,3))):
-                return False    # meet a wall
-    elif (target_x_grid == curr_x_grid):
-        for y in range (curr_y_grid, target_y_grid, 1):
-            x = target_x_grid
-            if (np.any(map_odata[math.ceil(y)-margin_grid:math.ceil(y)+margin_grid+1, x] in (1,3)) or np.any(map_odata[math.floor(y)-margin_grid:math.floor(y)+margin_grid, x] in (1,3))):
-                return False    # meet a wall
-    else:
-        gradient = (float)(target_y_grid - curr_y_grid)/(float)(target_x_grid - curr_x_grid)
-        x_init = curr_x_grid #for iteration
-        y_init = curr_y_grid
-        x_dest = target_x_grid
-        if curr_x_grid > target_x_grid:
-            x_init = target_x_grid
-            y_init = target_y_grid
-            x_dest = curr_x_grid
-        for x in range (x_init + 1, x_dest, 1):
-            y = gradient * (x - x_init) + y_init
-            if (np.any(map_odata[math.ceil(y), x] == 3) or np.any(map_odata[math.floor(y), x] == 3)):
-                return False    # meet a wall
-    return True
-
-# def bresenham_line(x0, y0, x1, y1):
-#     """Bresenham's line algorithm"""
-#     points = []
-#     dx = abs(x1 - x0)
-#     dy = abs(y1 - y0)
-#     x, y = x0, y0
-#     sx = 1 if x0 < x1 else -1
-#     sy = 1 if y0 < y1 else -1
-
-#     if dx > dy:
-#         err = dx / 2.0
-#         while x != x1:
-#             points.append((x, y))
-#             err -= dy
-#             if err < 0:
-#                 y += sy
-#                 err += dx
-#             x += sx
-#     else:
-#         err = dy / 2.0
-#         while y != y1:
-#             points.append((x, y))
-#             err -= dx
-#             if err < 0:
-#                 x += sx
-#                 err += dy
-#             y += sy
-
-#     points.append((x, y))
-#     return points
-
-# def ableToTravel(map_array, start, end):
-#     points = bresenham_line(start[1], start[0], end[1], end[0])
-#     for point in points:
-#         row, col = point
-#         if map_array[row][col] == 3:  # Check if the cell is non-traversable
-#             return False
-#     return True
-        
 
 def median(arr):
     ind = round(len(arr)/2)
     return arr[ind]
 
-def sortpos(arr,x,y):
-    distancedic = {}
-    for i in arr:
-        distancedic[(i[0] - x)**2 + (i[1]-y)**2] = i
-    keys = sorted(list(distancedic.keys()))
-    ans =[]
-    for i in keys:
-        ans.append(distancedic[i])
-    return ans
 
 def findfronteirs(tmap,posi):
     frontiers = []
@@ -229,6 +149,73 @@ def euler_from_quaternion(x, y, z, w):
 
     return roll_x, pitch_y, yaw_z # in radians
 
+def is_wall_between(occupancy_array, point1, point2):
+    y1, x1 = point1
+    y2, x2 = point2
+
+    # Calculate the differences in y and x coordinates
+    dy = y2 - y1
+    dx = x2 - x1
+    def is_wall(occupancy_array, y, x):
+        # Check if the coordinates are within the occupancy array bounds
+        if 0 <= y < len(occupancy_array) and 0 <= x < len(occupancy_array[0]):
+            # Check if the cell contains a wall
+            return occupancy_array[y, x] == 3
+        else:
+            # If coordinates are out of bounds, consider it a wall
+            return True
+
+
+    # Calculate step direction
+
+    # Calculate absolute differences
+    dy = abs(dy)
+    dx = abs(dx)
+
+    # Check for steepness of the line
+    steep = dy > dx
+
+    if steep:
+        # If steep, swap coordinates
+        x1, y1 = y1, x1
+        x2, y2 = y2, x2
+
+    if x1 > x2:
+        # If x1 > x2, swap coordinates
+        x1, x2 = x2, x1
+        y1, y2 = y2, y1
+
+    # Recalculate differences
+    dx = x2 - x1
+    dy = abs(y2 - y1)
+
+    # Initialize error
+    error = dx // 2
+    y = y1
+
+    # Determine y step direction
+    y_step = 1 if y1 < y2 else -1
+
+    for x in range(x1, x2 + 1):
+        if steep:
+            # If steep, swap coordinates back
+            if is_wall(occupancy_array, x, y):
+                return True
+        else:
+            # Otherwise, check if there's a wall
+            if is_wall(occupancy_array, y, x):
+                return True
+
+        # Update error
+        error -= dy
+        if error < 0:
+            # Move to next y coordinate
+            y += y_step
+            error += dx
+
+    # If no walls found, return False
+    return False
+
 
 def heuristic(node, target):
     return (node[0] - target[0])**2 + (node[1] - target[1])**2
@@ -322,9 +309,14 @@ class Occupy(Node):
         self.isSpinning = False
         self.path = []
         self.currentFrontier = []
-        self.shouldScan = False
+        self.targetReached = False
         self.doneMapping = True
-        self.mapgrid= []
+        self.mapPath = []
+        self.astarList = []
+        self.origin = []
+        self.odata = []
+        self.map_res = 0
+        self.straightToTarget = False
         # self.angularspeed = 0
         #self.startTime = time.time()
         #self.pastTargets = []
@@ -360,7 +352,7 @@ class Occupy(Node):
         
         
     def stopbot(self):
-        self.get_logger().info('In stopbot')
+        #self.get_logger().info('In stopbot')
         # publish to cmd_vel to move TurtleBot
         twist = Twist()
         twist.linear.x = 0.0
@@ -464,37 +456,103 @@ class Occupy(Node):
 
         # get map resolution
         map_res = msg.info.resolution
+        self.map_res = map_res
         # get map origin struct has fields of x, y, and z
         map_origin = msg.info.origin.position
         # get map grid positions for x, y position
         grid_x = round((cur_pos.x - map_origin.x) / map_res)
         grid_y = round(((cur_pos.y - map_origin.y) / map_res))
         # self.get_logger().info('Grid Y: %i Grid X: %i' % (grid_y, grid_x))
+        self.origin = [map_origin.y,map_origin.x]
 
         # binnum go from 1 to 3 so we can use uint8
         # convert into 2D array using column order
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
+        self.odata = odata
+        if self.target:
+            nTarget = [round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res)]
+            self.straightToTarget = not is_wall_between(odata, nTarget, [grid_y,grid_x])
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
-        frontier_positions = findfronteirs(odata,(grid_y,grid_x))
-        midpoint_positions = []
-        for i in frontier_positions:
-            midpoint_positions.append(median(i))
-        #for x,y in midpoint_positions:
-        #    odata[x,y] = 0
+        if self.targetReached:
+            self.targetReached = False
+            if self.path:
+                print('come on')
+                self.target = self.path.pop(0)
+            else:
+                frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+                midpoint_positions = []
+                for i in frontier_positions:
+                    midpoint_positions.append(median(i))
+                #for x,y in midpoint_positions:
+                #    odata[x,y] = 0
+                print('yasssss\n\n\n\n')
+                if midpoint_positions:
+                    test_target = midpoint_positions[0]
+                    # for i in range (-2,3):
+                    #     for j in range (-2,3):
+                    #         odata[test_target[0]+i, test_target[1]+j] = 0
+                    # odata[test_target[0], test_target[1]] = 0
+                    a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
+                    self.astarList = a_star_list
         
-        if midpoint_positions:
-            test_target = midpoint_positions[0]
-            for i in range (-2,3):
-                for j in range (-2,3):
-                    odata[test_target[0]+i, test_target[1]+j] = 0
-            odata[test_target[0], test_target[1]] = 0
-            a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
-            for x in a_star_list:
-                odata[x[0], x[1]] = 0
-        
-       
+                    for x in a_star_list:
+                        odata[x[0], x[1]] = 0
+                    
+                    path = []
+                    for i in range(len(a_star_list)):
+                        if not path:
+                            path.append(a_star_list[i])
+                            try:
+                                grad = (a_star_list[1][1]-a_star_list[0][1]) /(a_star_list[1][0]- a_star_list[0][0])
+                            except ZeroDivisionError:
+                                if a_star_list[1][1]-a_star_list[0][1] > 0:
+                                    grad = 10
+                                else:
+                                    grad = -10
+                            continue
+                        try:
+                            ngrad = (a_star_list[i][1]-a_star_list[i-1][1]) /(a_star_list[i][0]- a_star_list[i-1][0])
+                        except ZeroDivisionError:
+                            if (a_star_list[i][1]-a_star_list[i-1][1])  > 0:
+                                ngrad = 10
+                            else:
+                                ngrad = -10
+                        if i%5 == 0:
+                            path.append(a_star_list[i])
+                            continue
+                        if np.arctan(grad) - np.arctan(ngrad) < np.radians(5):
+                            continue
+                        if abs(np.arctan(grad) - np.arctan(ngrad)) > np.radians(100):
+                            path.append(a_star_list[i-1][0] + 1, a_star_list[i-1][1] + grad)
+                        grad = ngrad
+                        path.append(a_star_list[i-1])
+                        path.append(a_star_list[i])
+                    path.append(a_star_list[-1])
+                    for i in path:
+                        odata[i[0],i[1]] = 0
+                    realpath = []
+                    self.mapPath = path
+                    print(path)
+                    for point in path:
+                        realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
+                        print('realpath')
+                        print(realpath[-1])
+                    self.path = realpath
+                    print('path' , self.path)
+                    self.target = self.path.pop(0)
+        # for i in self.astarList:
+        #     odata[i[0],i[1]] = 0
+     
         if True:
+            # for point in self.mapPath:
+            #     print(point)
+            #     for i in range(-3,3):
+            #         for j in range(-2,2):
+            #             try:
+            #                 odata[point[0+i],point[1+j]] = 0
+            #             except:
+            #                 print('a')
             img = Image.fromarray(odata)
             # find center of image
             i_centerx = iwidth/2
@@ -644,25 +702,31 @@ class Occupy(Node):
         rclpy.spin_once(self) #get the lidar data to prevent crash
             
     def Move(self):
-        target = []
         rclpy.spin_once(self)
-        print(target)
+        #print(target)
         while (True):
             # print('starting')
-            print(target)
+            # self.target = [0,0]
+            # print(self.target)
             rclpy.spin_once(self)
             try:
                 target = self.target
-                if not target or abs(target[1]-self.x) + abs(target[0]-self.y) < proximity_limit:
-                    self.shouldScan = True
-                        # print("Target reached")
+                if target:
+                    print('distance :')
+                    print(abs(target[1]-self.x) + abs(target[0]-self.y))
+
+                if not target or (((target[1]-self.x)**2 + (target[0]-self.y)**2)**0.5 < proximity_limit and self.straightToTarget):
+                    self.targetReached = True
+                    print("Target reached")
+                    print(self.path)
                     self.stopbot()
                 else:
-                    # print('moving')
+                    self.targetReached = False
+                    print('moving')
                     self.movetotarget(target)
             except Exception as e:
                 print(e)
-                print('a')
+                print('b')
 
 
 def main(args=None):

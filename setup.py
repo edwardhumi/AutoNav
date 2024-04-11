@@ -27,7 +27,8 @@ setup(
             'r2occupancy2 = auto_nav.r2occupancy2:main',
             'r2auto_nav = auto_nav.r2auto_nav:main',
             'r2run = auto_nav.robotgo:main',
-            'r2line = auto_nav.linefollower:main'
+            'r2line = auto_nav.linefollower:main',
+            'r2new = auto_nav.astar:main'
         ],
     },
 )
