@@ -27,7 +27,7 @@ import heapq
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 10  
+threshold = 5  
 proximity_limit = 0.35
 rotatechange = 0.25
 stop_distance = 0.22
@@ -229,6 +229,55 @@ def euler_from_quaternion(x, y, z, w):
 
     return roll_x, pitch_y, yaw_z # in radians
 
+def heuristic(node, target):
+    return (node[0] - target[0])**2 + (node[1] - target[1])**2
+
+def find_neighbors(node, occupancy_data, nrows, ncols):
+    neighbors = []
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    for dir in directions:
+        neighbor = (node[0] + dir[0], node[1] + dir[1])
+        if 0 <= neighbor[0] < nrows and 0 <= neighbor[1] < ncols:
+            if occupancy_data[neighbor[0], neighbor[1]] != 3:  # Check if it is not wall
+                neighbors.append(neighbor)
+    return neighbors
+
+def a_star(start, target, occupancy_data, nrows, ncols):
+    open_set = []
+    closed_set = set()
+    heapq.heappush(open_set, (0, start))
+    came_from = {}
+
+    g_score = {start: 0}
+    f_score = {start: heuristic(start, target)}
+
+    while open_set:
+        current = heapq.heappop(open_set)[1]
+
+        if current == target:
+            path = []
+            while current in came_from:
+                path.append(current)
+                current = came_from[current]
+            path.append(start)
+            path.reverse()
+            return path
+
+        closed_set.add(current)
+
+        for neighbor in find_neighbors(current, occupancy_data, nrows, ncols):
+            if neighbor in closed_set:
+                continue
+
+            tentative_g_score = g_score[current] + 1  # Assuming cost of moving from one cell to another is 1
+
+            if neighbor not in [x[1] for x in open_set] or tentative_g_score < g_score.get(neighbor, float('inf')):
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g_score
+                f_score[neighbor] = tentative_g_score + heuristic(neighbor, target)
+                heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+    return None  # No path found
 
 class Occupy(Node):
     def __init__(self):
@@ -433,6 +482,19 @@ class Occupy(Node):
         for x,y in midpoint_positions:
             odata[x,y] = 0
         
+        if midpoint_positions:
+            for i in range (-5,6):
+                for j in range (-5,6):
+                    odata[grid_y+i, grid_x+j] = 0
+            for position in midpoint_positions:
+                test_target = position
+                for i in range (-2,3):
+                    for j in range (-2,3):
+                        odata[test_target[0]+i, test_target[1]+j] = 0
+                odata[test_target[0], test_target[1]] = 0
+                a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
+                for x in a_star_list:
+                    odata[x[0], x[1]] = 0
         
        
         if True:
