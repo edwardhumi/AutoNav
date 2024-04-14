@@ -39,7 +39,7 @@ threshold = 5
 proximity_limit = 0.15
 target_limit = 0.5
 rotatechange = 0.25
-stop_distance = 0.22
+stop_distance = 0.25
 front_angle = 40
 precission = 0.15
 angleChange = 10
@@ -685,7 +685,7 @@ class Occupy(Node):
                     twast.angular.z = angular
                     self.publisher.publish(twast)
                 self.stopbot()
-                self.stop_distance = 0.22
+                self.stop_distance = 0.25
                 # self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
                 # self.isCrashing = False
