@@ -33,17 +33,18 @@ import heapq
 
 
 # constants
-occ_bins = [-1, 0, 60, 100]
+occ_bins = [-1, 0, 55, 100]
 map_bg_color = 1
 threshold = 5
 proximity_limit = 0.15
-target_limit = 0.5
+target_limit = 0.6
 rotatechange = 0.25
 stop_distance = 0.25
-front_angle = 40
+front_angle = 30
 precission = 0.15
 angleChange = 10
 testing = True
+wall_size = 0.10
     
 #waitTime = 60
             
@@ -526,7 +527,7 @@ class Occupy(Node):
                     
                     # WALL THICKENING
                     ndata = np.copy(odata)
-                    size = round(0.10/map_res)
+                    size = round(wall_size/map_res)
                     #size = 1
                     for i in range(len(odata)):
                         for j in range(len(odata[0])):
@@ -709,7 +710,7 @@ class Occupy(Node):
                         angle -= np.pi
                 
                 #print(np.degrees(angle))                
-                if abs(np.degrees(angle)) > 10:
+                if abs(np.degrees(angle)) > 20:
                     self.stopbot()
                     self.rotatebot(np.degrees(angle))                
                 # print('Start moving')
