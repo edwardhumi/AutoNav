@@ -135,7 +135,23 @@ def findfronteirs(tmap,posi):
     return frontiers
     
 
+def isFronteir(tmap,pos):
+    if tmap[pos[0],pos[1]]   == 2:
+        if pos[0] ==0:
+            temp = tmap[:2,:]
+        elif pos[0] == len(tmap)-1:
+            temp = tmap[pos[0]-1:,:]
+        else:
+            temp = tmap[pos[0]-1:pos[0]+2,:]
 
+        if pos[1] == 0:
+            a = temp[:,:2]
+        elif pos[1] == len(tmap[0])-1:
+            a = temp[:,pos[1]-1:]
+        else:
+            a = temp[:,pos[1]-1:pos[1]+2]
+        return np.any(a==1)
+    return False
 # code from https://automaticaddison.com/how-to-convert-a-quaternion-into-euler-angles-in-python/
 def euler_from_quaternion(x, y, z, w):
     """
@@ -490,14 +506,21 @@ class Occupy(Node):
         self.odata = odata
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
+        if self.currentFrontier:
+            if not isFronteir(odata, (round((self.currentFrontier[0]-map_origin.y)/map_res),round((self.currentFrontier[1]-map_origin.x)/map_res))):
+                self.path = []
+                self.currentFrontier = []
         if self.targetReached:
             self.targetReached = False
             if self.path:
+
                 # removing closer path
                 remove_index = []
                 for i in self.path:
                     if ((i[0] - self.y)**2 + (i[1] - self.x)**2)**0.5 < target_limit:
                         if not is_wall_between(odata, (grid_y,grid_x),(round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))):
+                            remove_index.append(i)
+                        elif odata[round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res)] == 3:
                             remove_index.append(i)
                     else:
                         break
@@ -534,7 +557,7 @@ class Occupy(Node):
                             if odata[i,j] == 3:
                                 for k in range(-size,size):
                                     for l in range(-size,size):
-                                        if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])):
+                                        if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])) and abs(i+k - grid_y) + abs(j+l - grid_x) > 0.20/map_res :
                                             ndata[i+k,j+l] = 3
                     odata = ndata
                     
@@ -563,6 +586,7 @@ class Occupy(Node):
                             #print('realpath')
                             #print(realpath[-1])
                         self.path = realpath
+                        self.currentFrontier = self.path[-1]
                         #print('path' , self.path)
                         self.target = self.path.pop(0)
                     else:
