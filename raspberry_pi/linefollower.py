@@ -101,7 +101,7 @@ class Mover(Node):
                 10)
         self.subscription2
         ################################################
-        self.door = "door1"
+        self.door = "0"
         self.doneServer = False
         self.isRotating = False
 
