@@ -235,7 +235,7 @@ def heuristic(node, target):
 
 def find_neighbors(node, occupancy_data, nrows, ncols):
     neighbors = []
-    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1),(1,1),(1,-1),(-1,1),(-1,-1)]
     for dir in directions:
         neighbor = (node[0] + dir[0], node[1] + dir[1])
         if 0 <= neighbor[0] < nrows and 0 <= neighbor[1] < ncols:
@@ -493,8 +493,8 @@ class Occupy(Node):
         print(midpoint_positions2)
         
         ndata = np.copy(odata)
-        size = round(0.3/map_res)
-        size = 1
+        size = round(0.10/map_res)
+        #size = 1
         for i in range(len(odata)):
             for j in range(len(odata[0])):
                 #print('a')

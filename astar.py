@@ -35,10 +35,10 @@ import heapq
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 0
+threshold = 5
 proximity_limit = 0.2
 rotatechange = 0.25
-stop_distance = 0.3
+stop_distance = 0.22
 front_angle = 35
 precission = 0.15
 angleChange = 10
@@ -234,7 +234,7 @@ def find_neighbors(node, occupancy_data, nrows, ncols):
     for dir in directions:
         neighbor = (node[0] + dir[0], node[1] + dir[1])
         if 0 <= neighbor[0] < nrows and 0 <= neighbor[1] < ncols:
-            if occupancy_data[neighbor[0], neighbor[1]] == 2:  # Check if it is not wall
+            if occupancy_data[neighbor[0], neighbor[1]] not in  (1,3):  # Check if it is not wall
                 neighbors.append(neighbor)
     return neighbors
 
@@ -271,11 +271,6 @@ def a_star(start, target, occupancy_data, nrows, ncols):
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
                 f_score[neighbor] = tentative_g_score + heuristic(neighbor, target)
-                for i in range(-2,3):
-                    for j in range(-2,3):
-                        if (0 <= i < len(occupancy_data)) and (0<=j < len(occupancy_data[0])):
-                            if occupancy_data[neighbor[0]+i, neighbor[1]+j] == 3:
-                                f_score[neighbor] = f_score[neighbor] * 3
                 heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
     return None  # No path found
@@ -492,40 +487,30 @@ class Occupy(Node):
         if self.targetReached:
             self.targetReached = False
             if self.path:
-                #print('come on')
+                # removing closer path
+                remove_index = []
                 for i in self.path:
                     if ((i[0] - self.y)**2 + (i[1] - self.x)**2)**0.5 < proximity_limit:
-                        if is_wall_between(odata, (grid_y,grid_x),(round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))):
-                            self.path.pop(0)
-                self.target = self.path.pop(0)
+                        if not is_wall_between(odata, (grid_y,grid_x),(round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))):
+                            remove_index.append(i)
+                    else:
+                        break
+                for i in remove_index:
+                    self.path.remove(i)
+            #######################################################
+            # Sets target to Self if frontier is cleared          #
+            #######################################################
+            
+                if self.path:
+                    self.target = self.path.pop(0)
+                else:
+                    self.target = (self.y,self.x)
             else:
                 frontier_positions = findfronteirs(odata,(grid_y,grid_x))
                 midpoint_positions = []
                 for i in frontier_positions:
                     midpoint_positions.append(median(i))
-                    
-                # midpoint_positions2 = midpoint_positions.copy()
-                # #print(midpoint_positions2)
-                
-
-                # for point in midpoint_positions:
-                #     count = 0
-                #     for i in range(-50,50):
-                #         for j in range(-50,50):
-                #             if 0 <= point[0]+i < len(odata) and 0 <= point[1]+j < len(odata[0]):
-                #                 if odata[point[0]+i,point[1]+j] == 1:
-                #                     count += 1
-                #             else:
-                #                 count += 1
-                #     if count > 6905:
-                #         #print('AAAAAAAAAAAA\n\n\n\n\n\n')
-                #         #print(count)
-                #         midpoint_positions2.remove(point)
-                # #print(midpoint_positions2)
-                # midpoint_positions = midpoint_positions2
-                # #for x,y in midpoint_positions:
-                # #    odata[x,y] = 0
-                # #print('yasssss\n\n\n\n')
+        
                 
                 if midpoint_positions:
                     # for i in range (-2,3):
@@ -533,8 +518,8 @@ class Occupy(Node):
                     #         odata[test_target[0]+i, test_target[1]+j] = 0
                     # odata[test_target[0], test_target[1]] = 0
                     ndata = np.copy(odata)
-                    size = round(0.35/map_res)
-                    size = 1
+                    size = round(0.10/map_res)
+                    #size = 1
                     for i in range(len(odata)):
                         for j in range(len(odata[0])):
                             #print('a')
@@ -547,11 +532,22 @@ class Occupy(Node):
                                             ndata[i+k,j+l] = 3
                     odata = ndata
                     
+                    
+                    a_star_list = []
                     for i in range(len(midpoint_positions)):
+                        print('test')
                         test_target = midpoint_positions[i]
-                        a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
-                        if a_star_list != None:
+                        for i in range (-2,3):
+                            for j in range (-2,3):
+                                odata[test_target[0]+i, test_target[1]+j] = 0
+                        odata[test_target[0], test_target[1]] = 0
+                        if a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth):
+                            a_star_list = (a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth))
+                            print(a_star_list)
                             break
+                        if a_star_list:
+                            for x in a_star_list:
+                                odata[x[0], x[1]] = 0
                     self.astarList = a_star_list
                     
                     # path = []
@@ -560,53 +556,53 @@ class Occupy(Node):
                     # self.path = path
                         
                     # self.target = self.path.pop(0)
-                    
-                    path = []
-                    for i in range(len(a_star_list)):
-                        if not path:
-                            path.append(a_star_list[i])
+                    if a_star_list:
+                        path = []
+                        for i in range(len(a_star_list)):
+                            if not path:
+                                path.append(a_star_list[i])
+                                try:
+                                    grad = (a_star_list[1][1]-a_star_list[0][1]) /(a_star_list[1][0]- a_star_list[0][0])
+                                except ZeroDivisionError:
+                                    if a_star_list[1][1]-a_star_list[0][1] > 0:
+                                        grad = 10
+                                    else:
+                                        grad = -10
+                                continue
                             try:
-                                grad = (a_star_list[1][1]-a_star_list[0][1]) /(a_star_list[1][0]- a_star_list[0][0])
+                                ngrad = (a_star_list[i][1]-a_star_list[i-1][1]) /(a_star_list[i][0]- a_star_list[i-1][0])
                             except ZeroDivisionError:
-                                if a_star_list[1][1]-a_star_list[0][1] > 0:
-                                    grad = 10
+                                if (a_star_list[i][1]-a_star_list[i-1][1])  > 0:
+                                    ngrad = 10
                                 else:
-                                    grad = -10
-                            continue
-                        try:
-                            ngrad = (a_star_list[i][1]-a_star_list[i-1][1]) /(a_star_list[i][0]- a_star_list[i-1][0])
-                        except ZeroDivisionError:
-                            if (a_star_list[i][1]-a_star_list[i-1][1])  > 0:
-                                ngrad = 10
-                            else:
-                                ngrad = -10
-                        if i % 10== 0:
+                                    ngrad = -10
+                            if i % 10== 0:
+                                path.append(a_star_list[i])
+                                continue
+                            if abs(np.arctan(grad) - np.arctan(ngrad)) < np.radians(5):
+                                continue
+                            # if abs(np.arctan(grad) - np.arctan(ngrad)) > np.radians(100):
+                            #     path.append(a_star_list[i-1][0] + 1, a_star_list[i-1][1] + grad)
+                            grad = ngrad
+                            path.append(a_star_list[i-1])
                             path.append(a_star_list[i])
-                            continue
-                        if np.arctan(grad) - np.arctan(ngrad) < np.radians(5):
-                            continue
-                        if abs(np.arctan(grad) - np.arctan(ngrad)) > np.radians(100):
-                            path.append(a_star_list[i-1][0] + 1, a_star_list[i-1][1] + grad)
-                        grad = ngrad
-                        path.append(a_star_list[i-1])
-                        path.append(a_star_list[i])
-                    path.append(a_star_list[-1])
-                    # for i in path:
-                    #     odata[i[0],i[1]] = 0
-                    realpath = []
-                    self.mapPath = path
-                    #print(path)
-                    for point in path:
-                        realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
-                        #print('realpath')
-                        #print(realpath[-1])
-                    self.path = realpath
-                    #print('path' , self.path)
-                    self.target = self.path.pop(0)
+                        path.append(a_star_list[-1])
+                        # for i in path:
+                        #     odata[i[0],i[1]] = 0
+                        realpath = []
+                        self.mapPath = path
+                        #print(path)
+                        for point in path:
+                            realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
+                            #print('realpath')
+                            #print(realpath[-1])
+                        self.path = realpath
+                        #print('path' , self.path)
+                        self.target = self.path.pop(0)
         # for i in self.astarList:
         #     odata[i[0],i[1]] = 0
      
-        if not False:
+        if testing:
             for i in self.path:
                 npoint = (round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))
                 odata[npoint[0],npoint[1]] = 0
@@ -677,12 +673,12 @@ class Occupy(Node):
                     anglePos = (closestAngle +i)%degreeNum
                     angleNeg = (closestAngle- i)%degreeNum
                     try:
-                        if (not rightFound) and abs(self.laser_range[anglePos]) > 0.4:
+                        if (not rightFound) and abs(self.laser_range[anglePos]) > 0.35:
                             posDisplace = i
                             rightFound = True
                             #print(anglePos)
                         angleNeg = (closestAngle - i)%degreeNum
-                        if (not leftFound) and abs(self.laser_range[angleNeg]) > 0.4:
+                        if (not leftFound) and abs(self.laser_range[angleNeg]) > 0.35:
                             negDisplace = i
                             leftFound = True
                             #print(angleNeg)
