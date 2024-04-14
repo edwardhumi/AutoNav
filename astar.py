@@ -36,7 +36,8 @@ import heapq
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 5
-proximity_limit = 0.2
+proximity_limit = 0.15
+target_limit = 0.5
 rotatechange = 0.25
 stop_distance = 0.22
 front_angle = 35
@@ -477,11 +478,15 @@ class Occupy(Node):
         # convert into 2D array using column order
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
         
+        #Checks if target has been reached
+        if self.target:
+            mapTarget = (round((self.target[0] - map_origin.y)/map_res), round((self.target[1]-map_origin.x)/map_res))
+        if not self.target or (((self.target[1]-self.x)**2 + (self.target[0]-self.y)**2)**0.5 < proximity_limit and\
+                               not is_wall_between(odata, (grid_y,grid_x), mapTarget)):
+            self.targetReached = True
+        
                            
         self.odata = odata
-        if self.target:
-            nTarget = [round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res)]
-            self.straightToTarget = not is_wall_between(odata, nTarget, [grid_y,grid_x])
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
         if self.targetReached:
@@ -490,17 +495,17 @@ class Occupy(Node):
                 # removing closer path
                 remove_index = []
                 for i in self.path:
-                    if ((i[0] - self.y)**2 + (i[1] - self.x)**2)**0.5 < proximity_limit:
+                    if ((i[0] - self.y)**2 + (i[1] - self.x)**2)**0.5 < target_limit:
                         if not is_wall_between(odata, (grid_y,grid_x),(round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))):
                             remove_index.append(i)
                     else:
                         break
                 for i in remove_index:
                     self.path.remove(i)
+                    
             #######################################################
             # Sets target to Self if frontier is cleared          #
             #######################################################
-            
                 if self.path:
                     self.target = self.path.pop(0)
                 else:
@@ -517,81 +522,38 @@ class Occupy(Node):
                     #     for j in range (-2,3):
                     #         odata[test_target[0]+i, test_target[1]+j] = 0
                     # odata[test_target[0], test_target[1]] = 0
+                    
+                    # WALL THICKENING
                     ndata = np.copy(odata)
                     size = round(0.10/map_res)
                     #size = 1
                     for i in range(len(odata)):
                         for j in range(len(odata[0])):
-                            #print('a')
                             if odata[i,j] == 3:
-                                #print('c')
                                 for k in range(-size,size):
                                     for l in range(-size,size):
                                         if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])):
-                                            #print('b')
                                             ndata[i+k,j+l] = 3
                     odata = ndata
                     
                     
                     a_star_list = []
                     for i in range(len(midpoint_positions)):
-                        print('test')
                         test_target = midpoint_positions[i]
-                        for i in range (-2,3):
-                            for j in range (-2,3):
-                                odata[test_target[0]+i, test_target[1]+j] = 0
-                        odata[test_target[0], test_target[1]] = 0
+                        # for i in range (-2,3):
+                        #     for j in range (-2,3):
+                        #         odata[test_target[0]+i, test_target[1]+j] = 0
+                        # odata[test_target[0], test_target[1]] = 0
+                        
+                        # if a frontier is travelable
                         if a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth):
                             a_star_list = (a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth))
                             print(a_star_list)
                             break
-                        if a_star_list:
-                            for x in a_star_list:
-                                odata[x[0], x[1]] = 0
-                    self.astarList = a_star_list
-                    
-                    # path = []
-                    # for x in a_star_list:
-                    #     path.append((x[0] * map_res + map_origin.y, x[1] * map_res + map_origin.x))
-                    # self.path = path
-                        
-                    # self.target = self.path.pop(0)
+
                     if a_star_list:
-                        path = []
-                        for i in range(len(a_star_list)):
-                            if not path:
-                                path.append(a_star_list[i])
-                                try:
-                                    grad = (a_star_list[1][1]-a_star_list[0][1]) /(a_star_list[1][0]- a_star_list[0][0])
-                                except ZeroDivisionError:
-                                    if a_star_list[1][1]-a_star_list[0][1] > 0:
-                                        grad = 10
-                                    else:
-                                        grad = -10
-                                continue
-                            try:
-                                ngrad = (a_star_list[i][1]-a_star_list[i-1][1]) /(a_star_list[i][0]- a_star_list[i-1][0])
-                            except ZeroDivisionError:
-                                if (a_star_list[i][1]-a_star_list[i-1][1])  > 0:
-                                    ngrad = 10
-                                else:
-                                    ngrad = -10
-                            if i % 10== 0:
-                                path.append(a_star_list[i])
-                                continue
-                            if abs(np.arctan(grad) - np.arctan(ngrad)) < np.radians(5):
-                                continue
-                            # if abs(np.arctan(grad) - np.arctan(ngrad)) > np.radians(100):
-                            #     path.append(a_star_list[i-1][0] + 1, a_star_list[i-1][1] + grad)
-                            grad = ngrad
-                            path.append(a_star_list[i-1])
-                            path.append(a_star_list[i])
-                        path.append(a_star_list[-1])
-                        # for i in path:
-                        #     odata[i[0],i[1]] = 0
-                        realpath = []
-                        self.mapPath = path
-                        #print(path)
+                        path = a_star_list
+                        realpath = [] #path in real coordinates
                         for point in path:
                             realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
                             #print('realpath')
@@ -763,20 +725,10 @@ class Occupy(Node):
             # print(self.target)
             rclpy.spin_once(self)
             try:
-                target = self.target
-                # if target:
-                #     print('distance :')
-                #     print(abs(target[1]-self.x) + abs(target[0]-self.y))
-
-                if not target or (((target[1]-self.x)**2 + (target[0]-self.y)**2)**0.5 < proximity_limit):
-                    self.targetReached = True
-                    # print("Target reached")
-                    # print(self.path)
+                if self.targetReached: 
                     self.stopbot()
                 else:
-                    self.targetReached = False
-                    # print('moving')
-                    self.movetotarget(target)
+                    self.movetotarget(self.target)
             except Exception as e:
                 print(e)
                 print('b')
