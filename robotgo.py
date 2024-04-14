@@ -27,7 +27,7 @@ import heapq
 # constants
 occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
-threshold = 5  
+threshold = 5
 proximity_limit = 0.35
 rotatechange = 0.25
 stop_distance = 0.22
@@ -229,6 +229,7 @@ def euler_from_quaternion(x, y, z, w):
 
     return roll_x, pitch_y, yaw_z # in radians
 
+
 def heuristic(node, target):
     return (node[0] - target[0])**2 + (node[1] - target[1])**2
 
@@ -238,7 +239,7 @@ def find_neighbors(node, occupancy_data, nrows, ncols):
     for dir in directions:
         neighbor = (node[0] + dir[0], node[1] + dir[1])
         if 0 <= neighbor[0] < nrows and 0 <= neighbor[1] < ncols:
-            if occupancy_data[neighbor[0], neighbor[1]] != 3:  # Check if it is not wall
+            if occupancy_data[neighbor[0], neighbor[1]] not in  (1,3):  # Check if it is not wall
                 neighbors.append(neighbor)
     return neighbors
 
@@ -473,26 +474,51 @@ class Occupy(Node):
         # binnum go from 1 to 3 so we can use uint8
         # convert into 2D array using column order
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
+        
+        
+                                
+                
+        
+
+                
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
         frontier_positions = findfronteirs(odata,(grid_y,grid_x))
         midpoint_positions = []
         for i in frontier_positions:
             midpoint_positions.append(median(i))
-        for x,y in midpoint_positions:
-            odata[x,y] = 0
         
-        if midpoint_positions:
-            for i in range (-5,6):
-                for j in range (-5,6):
-                    odata[grid_y+i, grid_x+j] = 0
-            for position in midpoint_positions:
-                test_target = position
-                for i in range (-2,3):
-                    for j in range (-2,3):
-                        odata[test_target[0]+i, test_target[1]+j] = 0
-                odata[test_target[0], test_target[1]] = 0
-                a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
+
+        midpoint_positions2 = midpoint_positions.copy()
+        print(midpoint_positions2)
+        
+        ndata = np.copy(odata)
+        size = round(0.3/map_res)
+        size = 1
+        for i in range(len(odata)):
+            for j in range(len(odata[0])):
+                #print('a')
+                if odata[i,j] == 3:
+                    print('c')
+                    for k in range(-size,size):
+                        for l in range(-size,size):
+                            if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])):
+                                print('b')
+                                ndata[i+k,j+l] = 3
+        odata = ndata
+        
+        
+                    
+        a_star_list = []
+        for i in range(len(midpoint_positions)):
+            test_target = midpoint_positions[i]
+            for i in range (-2,3):
+                for j in range (-2,3):
+                    odata[test_target[0]+i, test_target[1]+j] = 0
+            odata[test_target[0], test_target[1]] = 0
+            if a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth):
+                a_star_list.extend(a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth))
+            if a_star_list:
                 for x in a_star_list:
                     odata[x[0], x[1]] = 0
         
@@ -565,19 +591,14 @@ class Occupy(Node):
                     anglePos = (closestAngle +i)%degreeNum
                     angleNeg = (closestAngle- i)%degreeNum
                     try:
-                        
-                        print(anglePos,self.laser_range[anglePos] - self.laser_range[anglePos-1])
-                        print(angleNeg,self.laser_range[angleNeg] - self.laser_range[angleNeg+1])
                         if (not rightFound) and abs(self.laser_range[anglePos]) > 0.35:
                             posDisplace = i
                             rightFound = True
-                            print('aaa')
                             print(anglePos)
                         angleNeg = (closestAngle - i)%degreeNum
                         if (not leftFound) and abs(self.laser_range[angleNeg]) > 0.35:
                             negDisplace = i
                             leftFound = True
-                            print('bbb')
                             print(angleNeg)
                         if leftFound and rightFound:
                             break
@@ -666,7 +687,7 @@ class Occupy(Node):
                         # print("Target reached")
                     self.stopbot()
                 else:
-                        # print('moving')
+                    # print('moving')
                     self.movetotarget(target)
             except Exception as e:
                 print(e)
