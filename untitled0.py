@@ -33,14 +33,13 @@ import heapq
 
 
 # constants
-occ_bins = [-1, 0, 60, 100]
+occ_bins = [-1, 0, 50, 100]
 map_bg_color = 1
 threshold = 5
-proximity_limit = 0.15
-target_limit = 0.5
+proximity_limit = 0.2
 rotatechange = 0.25
-stop_distance = 0.22
-front_angle = 40
+stop_distance = 0.3
+front_angle = 35
 precission = 0.15
 angleChange = 10
 testing = True
@@ -100,7 +99,7 @@ def findfronteirs(tmap,posi):
         p = qm.pop(0)
 
         if mark(p) == 'Map-Close-List':
-            #print('I am running')
+            print('I am running')
             continue
         
         if isFronteir(p):
@@ -231,11 +230,11 @@ def heuristic(node, target):
 
 def find_neighbors(node, occupancy_data, nrows, ncols):
     neighbors = []
-    directions = [(1, 0), (-1, 0), (0, 1), (0, -1),(1,1),(1,-1),(-1,1),(-1,-1)]
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
     for dir in directions:
         neighbor = (node[0] + dir[0], node[1] + dir[1])
         if 0 <= neighbor[0] < nrows and 0 <= neighbor[1] < ncols:
-            if occupancy_data[neighbor[0], neighbor[1]] not in  (1,3):  # Check if it is not wall
+            if occupancy_data[neighbor[0], neighbor[1]] != 3:  # Check if it is not wall
                 neighbors.append(neighbor)
     return neighbors
 
@@ -272,6 +271,11 @@ def a_star(start, target, occupancy_data, nrows, ncols):
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
                 f_score[neighbor] = tentative_g_score + heuristic(neighbor, target)
+                for i in range(-2,3):
+                    for j in range(-2,3):
+                        if (0 <= i < len(occupancy_data)) and (0<=j < len(occupancy_data[0])):
+                            if occupancy_data[neighbor[0]+i, neighbor[1]+j] == 3:
+                                f_score[neighbor] = f_score[neighbor] * 3
                 heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
     return None  # No path found
@@ -370,13 +374,13 @@ class Occupy(Node):
         self.publisher.publish(twist)
         
     def rotatebot(self, rot_angle):
-        #self.get_logger().info('In rotatebot')
+        self.get_logger().info('In rotatebot')
         if abs(rot_angle) < 5:
             rotatechange = 0.05
-        elif abs(rot_angle) < 30:
-            rotatechange = 0.2
+        elif abs(rot_angle) < 20:
+            rotatechange = 0.1
         else:
-            rotatechange = 0.5
+            rotatechange = 0.2
         
         # create Twist object
         twist = Twist()
@@ -477,102 +481,110 @@ class Occupy(Node):
         # binnum go from 1 to 3 so we can use uint8
         # convert into 2D array using column order
         odata = np.uint8(binnum.reshape(msg.info.height,msg.info.width))
-        
-        #Checks if target has been reached
-        if self.target:
-            mapTarget = (round((self.target[0] - map_origin.y)/map_res), round((self.target[1]-map_origin.x)/map_res))
-        if not self.target or (((self.target[1]-self.x)**2 + (self.target[0]-self.y)**2)**0.5 < proximity_limit and\
-                               not is_wall_between(odata, (grid_y,grid_x), mapTarget)):
-            self.targetReached = True
-        
-                           
         self.odata = odata
+        if self.target:
+            nTarget = [round((self.target[0]-map_origin.y)/map_res),round((self.target[1]-map_origin.x)/map_res)]
+            self.straightToTarget = not is_wall_between(odata, nTarget, [grid_y,grid_x])
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
         if self.targetReached:
             self.targetReached = False
             if self.path:
-                # removing closer path
-                remove_index = []
-                for i in self.path:
-                    if ((i[0] - self.y)**2 + (i[1] - self.x)**2)**0.5 < target_limit:
-                        if not is_wall_between(odata, (grid_y,grid_x),(round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))):
-                            remove_index.append(i)
-                    else:
-                        break
-                for i in remove_index:
-                    self.path.remove(i)
-                    
-            #######################################################
-            # Sets target to Self if frontier is cleared       ####
-            #######################################################
-                if self.path:
-                    self.target = self.path.pop(0)
-                else:
-                    self.targetReached = True
-                    self.target = []
+                print('come on')
+                self.target = self.path.pop(0)
             else:
                 frontier_positions = findfronteirs(odata,(grid_y,grid_x))
                 midpoint_positions = []
                 for i in frontier_positions:
                     midpoint_positions.append(median(i))
-        
+                    
+                midpoint_positions2 = midpoint_positions.copy()
+                print(midpoint_positions2)
                 
+                for point in midpoint_positions:
+                    count = 0
+                    for i in range(-50,50):
+                        for j in range(-50,50):
+                            if 0 <= point[0]+i < len(odata) and 0 <= point[1]+j < len(odata[0]):
+                                if odata[point[0]+i,point[1]+j] == 1:
+                                    count += 1
+                            else:
+                                count += 1
+                    if count > 6950:
+                        print('AAAAAAAAAAAA\n\n\n\n\n\n')
+                        print(count)
+                        midpoint_positions2.remove(point)
+                print(midpoint_positions2)
+                midpoint_positions = midpoint_positions2
+                #for x,y in midpoint_positions:
+                #    odata[x,y] = 0
+                print('yasssss\n\n\n\n')
                 if midpoint_positions:
+                    test_target = midpoint_positions[0]
                     # for i in range (-2,3):
                     #     for j in range (-2,3):
                     #         odata[test_target[0]+i, test_target[1]+j] = 0
                     # odata[test_target[0], test_target[1]] = 0
+                    a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth)
+                    self.astarList = a_star_list
+        
+                    for x in a_star_list:
+                        odata[x[0], x[1]] = 0
                     
-                    # WALL THICKENING
-                    ndata = np.copy(odata)
-                    size = round(0.10/map_res)
-                    #size = 1
-                    for i in range(len(odata)):
-                        for j in range(len(odata[0])):
-                            if odata[i,j] == 3:
-                                for k in range(-size,size):
-                                    for l in range(-size,size):
-                                        if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])):
-                                            ndata[i+k,j+l] = 3
-                    odata = ndata
-                    
-                    
-                    a_star_list = []
-                    print(len(midpoint_positions))
-                    for i in range(len(midpoint_positions)):
-                        print('astar running')
-                        test_target = midpoint_positions[i]
-                        # for i in range (-2,3):
-                        #     for j in range (-2,3):
-                        #         odata[test_target[0]+i, test_target[1]+j] = 0
-                        # odata[test_target[0], test_target[1]] = 0
-                        
-                        # if a frontier is travelable
-                        a_star_list = (a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth))
-                        if a_star_list:
-                            print(a_star_list)
-                            break
-
-                    if a_star_list:
-                        path = a_star_list
-                        realpath = [] #path in real coordinates
-                        for point in path:
-                            realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
-                            #print('realpath')
-                            #print(realpath[-1])
-                        self.path = realpath
-                        #print('path' , self.path)
-                        self.target = self.path.pop(0)
-                    else:
-                        print('no path found')
-        # for i in self.astarList:
-        #     odata[i[0],i[1]] = 0
+                    path = []
+                    for i in range(len(a_star_list)):
+                        if not path:
+                            path.append(a_star_list[i])
+                            try:
+                                grad = (a_star_list[1][1]-a_star_list[0][1]) /(a_star_list[1][0]- a_star_list[0][0])
+                            except ZeroDivisionError:
+                                if a_star_list[1][1]-a_star_list[0][1] > 0:
+                                    grad = 10
+                                else:
+                                    grad = -10
+                            continue
+                        try:
+                            ngrad = (a_star_list[i][1]-a_star_list[i-1][1]) /(a_star_list[i][0]- a_star_list[i-1][0])
+                        except ZeroDivisionError:
+                            if (a_star_list[i][1]-a_star_list[i-1][1])  > 0:
+                                ngrad = 10
+                            else:
+                                ngrad = -10
+                        if i%20 == 0:
+                            path.append(a_star_list[i])
+                            continue
+                        if np.arctan(grad) - np.arctan(ngrad) < np.radians(5):
+                            continue
+                        if abs(np.arctan(grad) - np.arctan(ngrad)) > np.radians(100):
+                            path.append(a_star_list[i-1][0] + 1, a_star_list[i-1][1] + grad)
+                        grad = ngrad
+                        path.append(a_star_list[i-1])
+                        path.append(a_star_list[i])
+                    path.append(a_star_list[-1])
+                    for i in path:
+                        odata[i[0],i[1]] = 0
+                    realpath = []
+                    self.mapPath = path
+                    print(path)
+                    for point in path:
+                        realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
+                        print('realpath')
+                        print(realpath[-1])
+                    self.path = realpath
+                    print('path' , self.path)
+                    self.target = self.path.pop(0)
+        for i in self.astarList:
+            odata[i[0],i[1]] = 0
      
-        if testing:
-            for i in self.path:
-                npoint = (round((i[0]-map_origin.y)/map_res),round((i[1]-map_origin.x)/map_res))
-                odata[npoint[0],npoint[1]] = 0
+        if True:
+            # for point in self.mapPath:
+            #     print(point)
+            #     for i in range(-3,3):
+            #         for j in range(-2,2):
+            #             try:
+            #                 odata[point[0+i],point[1+j]] = 0
+            #             except:
+            #                 print('a')
             img = Image.fromarray(odata)
             # find center of image
             i_centerx = iwidth/2
@@ -633,7 +645,7 @@ class Occupy(Node):
                 # for i in range(len(self.laser_range)):
                 #     print(i, self.laser_range[i])
                 
-                #print('closest Angle = {}'.format(closestAngle))
+                print('closest Angle = {}'.format(closestAngle))
                 leftFound = False
                 rightFound = False
                 for i in range(0,round(degreeNum/2)):
@@ -643,12 +655,12 @@ class Occupy(Node):
                         if (not rightFound) and abs(self.laser_range[anglePos]) > 0.35:
                             posDisplace = i
                             rightFound = True
-                            #print(anglePos)
+                            print(anglePos)
                         angleNeg = (closestAngle - i)%degreeNum
                         if (not leftFound) and abs(self.laser_range[angleNeg]) > 0.35:
                             negDisplace = i
                             leftFound = True
-                            #print(angleNeg)
+                            print(angleNeg)
                         if leftFound and rightFound:
                             break
                     except:
@@ -657,15 +669,15 @@ class Occupy(Node):
                     negDisplace = round(degreeNum/2)
                 if not rightFound:
                     posDisplace = round(degreeNum/2)
-                #print(posDisplace,negDisplace)
+                print(posDisplace,negDisplace)
                 posAngle = (closestAngle + posDisplace)%degreeNum
                 negAngle = (closestAngle - negDisplace)%degreeNum
-                #print(posAngle,negAngle)
+                print(posAngle,negAngle)
                 if posAngle > degreeNum/2:
                     posAngle = posAngle - degreeNum
                 if negAngle > degreeNum/2:
                     negAngle = negAngle - degreeNum
-                #print(posAngle,negAngle)
+                print(posAngle,negAngle)
                 if posAngle + negAngle < 0:
                     print('LEFT\n\n\n\n')
                 else:
@@ -676,6 +688,7 @@ class Occupy(Node):
                 while self.isCrashing:
                     rclpy.spin_once(self)
                     self.stop_distance = 0.4
+                    self.front_angle = 30
                     twast = Twist()
                     twast.linear.x = 0.0
                     if posAngle + negAngle > 0:
@@ -685,7 +698,8 @@ class Occupy(Node):
                     twast.angular.z = angular
                     self.publisher.publish(twast)
                 self.stopbot()
-                self.stop_distance = 0.22
+                self.stop_distance = 0.25
+                self.front_angle = 35
                 # self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
                 # self.isCrashing = False
@@ -694,7 +708,7 @@ class Occupy(Node):
                     twist.linear.x = 0.2
                     twist.angular.z = 0.0
                     self.publisher.publish(twist)
-                    #print("MOVING\n\n\n\n\n")
+                    print("MOVING\n\n\n\n\n")
                     time.sleep(0.8)
                 self.stopbot()          
             else:
@@ -708,7 +722,7 @@ class Occupy(Node):
                     else:
                         angle -= np.pi
                 
-                #print(np.degrees(angle))                
+                print(np.degrees(angle))                
                 if abs(np.degrees(angle)) > 10:
                     self.stopbot()
                     self.rotatebot(np.degrees(angle))                
@@ -728,10 +742,20 @@ class Occupy(Node):
             # print(self.target)
             rclpy.spin_once(self)
             try:
-                if self.targetReached: 
+                target = self.target
+                if target:
+                    print('distance :')
+                    print(abs(target[1]-self.x) + abs(target[0]-self.y))
+
+                if not target or (((target[1]-self.x)**2 + (target[0]-self.y)**2)**0.5 < proximity_limit and self.straightToTarget):
+                    self.targetReached = True
+                    print("Target reached")
+                    print(self.path)
                     self.stopbot()
                 else:
-                    self.movetotarget(self.target)
+                    self.targetReached = False
+                    print('moving')
+                    self.movetotarget(target)
             except Exception as e:
                 print(e)
                 print('b')
