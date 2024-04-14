@@ -106,7 +106,6 @@ class Mover(Node):
         self.isRotating = False
 
     def server_callback(self, msg):
-        print('test')
         self.get_logger().info('Received Door: "%s"' % msg.data)
         self.door = msg.data
         print("door num", msg.data)

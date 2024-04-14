@@ -30,6 +30,7 @@ from sensor_msgs.msg import LaserScan
 import cmath
 import time
 import heapq
+from std_msgs.msg import String
 
 
 # constants
@@ -319,6 +320,14 @@ class Occupy(Node):
         self.scan_subscription  # prevent unused variable warning
         self.laser_range = np.array([])
         
+        # create subscription to track current stage
+        self.subscription2 = self.create_subscription(
+                String,
+                'stage',
+                self.stage_callback,
+                10)
+        self.subscription2
+        
         # create publisher for moving TurtleBot
         self.publisher = self.create_publisher(Twist, 'cmd_vel', 10)
         self.subscription  # prevent unused variable warning
@@ -343,6 +352,9 @@ class Occupy(Node):
         self.odata = []
         self.map_res = 0
         self.straightToTarget = False
+        
+        # signal to start the program
+        self.start_autonav = False
         # self.angularspeed = 0
         #self.startTime = time.time()
         #self.pastTargets = []
@@ -355,6 +367,11 @@ class Occupy(Node):
     #     # self.x,self.y,self.z = position.x,position.y,position.z
     #     # self.roll, self.pitch, self.yaw = euler_from_quaternion(orientation_quat.x, orientation_quat.y, orientation_quat.z, orientation_quat.w)
         
+    def stage_callback(self, msg):
+        self.get_logger().info('Received Stage: "%s":' % msg.data)
+        if (msg.data == "autonav"):
+            self.start_autonav = True
+            
     def scan_callback(self, msg):
         # self.get_logger().info('In scan_callback')
         # create numpy array
