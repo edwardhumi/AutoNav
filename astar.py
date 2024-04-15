@@ -37,15 +37,15 @@ from std_msgs.msg import String
 occ_bins = [-1, 0, 55, 100]
 map_bg_color = 1
 threshold = 5
-proximity_limit = 0.15
+proximity_limit = 0.2
 target_limit = 0.6
 rotatechange = 0.25
 stop_distance = 0.25
-front_angle = 30
+front_angle = 35
 precission = 0.15
 angleChange = 10
 testing = True
-wall_size = 0.10
+wall_size = 0.08
     
 #waitTime = 60
             
@@ -351,7 +351,7 @@ class Occupy(Node):
         self.origin = []
         self.odata = []
         self.map_res = 0
-        self.straightToTarget = False
+        self.avoidingCrash = False
         
         # signal to start the program
         self.start_autonav = False
@@ -384,18 +384,23 @@ class Occupy(Node):
                 self.crashAngle = i
                 self.isCrashing = True
                 print("CRASHHHH")
+                if not self.avoidingCrash:
+                    self.stopbot()
                 break
             elif (self.laser_range[-1*i] != np.nan and self.laser_range[-1*i] < float(stop_distance)) and (not self.isSpinning) and self.target:
                 self.crashAngle = 360 - i
                 self.isCrashing = True
                 print("CRASHHHH")
+                if not self.avoidingCrash:
+                    self.stopbot()
                 break
             else:
                 self.isCrashing = False
-        
+        if self.isSpinning:
+            self.isCrashing = False
         
     def stopbot(self):
-        #self.get_logger().info('In stopbot')
+        self.get_logger().info('In stopbot')
         # publish to cmd_vel to move TurtleBot
         twist = Twist()
         twist.linear.x = 0.0
@@ -404,13 +409,11 @@ class Occupy(Node):
         self.publisher.publish(twist)
         
     def rotatebot(self, rot_angle):
-        #self.get_logger().info('In rotatebot')
-        if abs(rot_angle) < 5:
-            rotatechange = 0.05
-        elif abs(rot_angle) < 30:
+        self.get_logger().info('In rotatebot')
+        if abs(rot_angle) < 30:
             rotatechange = 0.2
         else:
-            rotatechange = 0.5
+            rotatechange = 0.4
         
         # create Twist object
         twist = Twist()
@@ -445,13 +448,14 @@ class Occupy(Node):
         while(c_change_dir * c_dir_diff > 0):
             # allow the callback functions to run
             # if self.angularspeed == 0:
-            #     break
+            #     break\
+            self.isSpinning = True
             rclpy.spin_once(self)
             current_yaw = self.yaw
             # convert the current yaw to complex form
             c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-            self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
-            self.get_logger().info('Target Yaw: %f' %math.degrees(target_yaw))
+            # self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
+            # self.get_logger().info('Target Yaw: %f' %math.degrees(target_yaw))
             # get difference in angle between current and target
             c_change = c_target_yaw / c_yaw
             # get the sign to see if we can stop
@@ -516,20 +520,30 @@ class Occupy(Node):
         if self.target:
             mapTarget = (round((self.target[0] - map_origin.y)/map_res), round((self.target[1]-map_origin.x)/map_res))
         if not self.target or (((self.target[1]-self.x)**2 + (self.target[0]-self.y)**2)**0.5 < proximity_limit and\
-                               not is_wall_between(odata, (grid_y,grid_x), mapTarget)):
+                               not is_wall_between(odata, (grid_y,grid_x), mapTarget) and not self.isSpinning):
             self.targetReached = True
+            print('target Reached')
+            #print(self.target)
+            #print(self.path)
+            self.stopbot()
         
                            
         self.odata = odata
         # set current robot location to 0
         odata[grid_y][grid_x] = 0
-        if self.currentFrontier:
-            if not isFronteir(odata, (round((self.currentFrontier[0]-map_origin.y)/map_res),round((self.currentFrontier[1]-map_origin.x)/map_res))):
-                self.path = []
-                self.currentFrontier = []
+        
         if self.targetReached:
+            #print('a')
             self.targetReached = False
+            #self.stopbot()
             if self.path:
+                if self.currentFrontier:
+                    print("Checking Fronteir")
+                    if not isFronteir(odata, (round((self.currentFrontier[0]-map_origin.y)/map_res),round((self.currentFrontier[1]-map_origin.x)/map_res))):
+                        self.path = []
+                        self.currentFrontier = []
+                        self.target = []
+                        print("Frontier Removed")
 
                 # removing closer path
                 remove_index = []
@@ -548,14 +562,19 @@ class Occupy(Node):
             # Sets target to Self if frontier is cleared       ####
             #######################################################
                 if self.path:
+                    print('Target Set')
                     self.target = self.path.pop(0)
                 else:
+                    print('Frontier Filled')
                     self.targetReached = True
                     self.target = []
-            else:
+            if not self.path:
+                print('self.path empty')
                 frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+                #print(frontier_positions)
                 midpoint_positions = []
                 for i in frontier_positions:
+                    print(i)
                     midpoint_positions.append(median(i))
         
                 
@@ -574,7 +593,14 @@ class Occupy(Node):
                             if odata[i,j] == 3:
                                 for k in range(-size,size):
                                     for l in range(-size,size):
-                                        if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])) and abs(i+k - grid_y) + abs(j+l - grid_x) > 0.20/map_res :
+                                        # nearPoint = False
+                                        # for m in midpoint_positions:
+                                        #     if abs(i+k - m[0]) + abs(j+l - m[1]) < 0.4/map_res:
+                                        #         nearPoint = True
+                                        #         break
+                                        # if nearPoint:
+                                        #     continue
+                                        if (0 < i+k < len(odata) and 0 < j+l < len(odata[0])) and abs(i+k - grid_y) + abs(j+l - grid_x) > 0.40/map_res :
                                             ndata[i+k,j+l] = 3
                     odata = ndata
                     
@@ -602,12 +628,13 @@ class Occupy(Node):
                             realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
                             #print('realpath')
                             #print(realpath[-1])
-                        self.path = realpath
+                        self.path = realpath[1:]
                         self.currentFrontier = self.path[-1]
                         #print('path' , self.path)
                         self.target = self.path.pop(0)
                     else:
                         print('no path found')
+                        self.stopbot()
         # for i in self.astarList:
         #     odata[i[0],i[1]] = 0
      
@@ -664,18 +691,30 @@ class Occupy(Node):
             
     def movetotarget(self, target):
         if target:
+            angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
+            if (target[1]-self.x) < 0:
+                if (target[0]-self.y) > 0:
+                    angle += np.pi
+                else:
+                    angle -= np.pi
+                    
+            if abs(np.degrees(angle)) > 10:
+                self.stopbot()
+                self.rotatebot(np.degrees(angle))    
+            rclpy.spin_once(self)
+            
             if (self.isCrashing):
                 # Handles crash avoidance
-                # print("Avoiding crash")
+                print("Avoiding crash")
                 self.stopbot()
                 closestAngle = np.nanargmin(self.laser_range)
                 degreeNum = len(self.laser_range)
-                # degreeNum = 360
+                # # degreeNum = 360
                 
-                # for i in range(len(self.laser_range)):
-                #     print(i, self.laser_range[i])
+                for i in range(len(self.laser_range)):
+                    print(i, self.laser_range[i])
                 
-                #print('closest Angle = {}'.format(closestAngle))
+                # #print('closest Angle = {}'.format(closestAngle))
                 leftFound = False
                 rightFound = False
                 for i in range(0,round(degreeNum/2)):
@@ -708,6 +747,8 @@ class Occupy(Node):
                 if negAngle > degreeNum/2:
                     negAngle = negAngle - degreeNum
                 #print(posAngle,negAngle)
+                if closestAngle > 180:
+                    closestAngle -= 360
                 if posAngle + negAngle < 0:
                     print('LEFT\n\n\n\n')
                 else:
@@ -717,7 +758,9 @@ class Occupy(Node):
                 # print("destination angle: ",destinationAngle)
                 while self.isCrashing:
                     rclpy.spin_once(self)
-                    self.stop_distance = 0.4
+                    global front_angle
+                    front_angle = 45
+                    self.avoidingCrash = True
                     twast = Twist()
                     twast.linear.x = 0.0
                     if posAngle + negAngle > 0:
@@ -727,7 +770,8 @@ class Occupy(Node):
                     twast.angular.z = angular
                     self.publisher.publish(twast)
                 self.stopbot()
-                self.stop_distance = 0.25
+                print('crash avoided')
+                #self.stop_distance = 0.25
                 # self.rotatebot(destinationAngle)
                 rclpy.spin_once(self)
                 # self.isCrashing = False
@@ -736,25 +780,17 @@ class Occupy(Node):
                     twist.linear.x = 0.2
                     twist.angular.z = 0.0
                     self.publisher.publish(twist)
+                    print('moving away')
                     #print("MOVING\n\n\n\n\n")
-                    time.sleep(0.8)
+                    time.sleep(1)
+                self.avoidingCrash = False
                 self.stopbot()          
             else:
                 # Handles normal movement to target
                 # print("target acquired")
                 # print(target)
-                angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
-                if (target[1]-self.x) < 0:
-                    if (target[0]-self.y) > 0:
-                        angle += np.pi
-                    else:
-                        angle -= np.pi
-                
-                #print(np.degrees(angle))                
-                if abs(np.degrees(angle)) > 20:
-                    self.stopbot()
-                    self.rotatebot(np.degrees(angle))                
-                # print('Start moving')
+                       
+                print('Start moving')
                 twist = Twist()
                 twist.linear.x = 0.2
                 twist.angular.z = 0.0
