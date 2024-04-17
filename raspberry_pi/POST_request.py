@@ -45,7 +45,11 @@ class ESPServer(Node):
     def server_callback(self):
         if self.startCall:
             self.get_logger().info("STARTING HTTP CALL")
-            door = open_door("172.20.10.4", 39)
+            door = "0"
+            try:
+                door = open_door("172.20.10.4", 39)
+            except:
+                print("Trying to connect")
             msg = String()
             msg.data = door
             self.publisher_.publish(msg)
