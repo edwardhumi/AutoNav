@@ -36,7 +36,7 @@ from std_msgs.msg import String
 occ_bins = [-1, 0, 55, 100]
 map_bg_color = 1
 threshold = 0.3
-proximity_limit = 0.3
+proximity_limit = 0.25
 target_limit = 0.7
 rotatechange = 0.25
 stop_distance = 0.25
@@ -731,10 +731,10 @@ class Occupy(Node):
                     angle += np.pi
                 else:
                     angle -= np.pi
-            print(np.degrees(self.yaw))
-            print(np.degrees(angle))
+            #print(np.degrees(self.yaw))
+            #print(np.degrees(angle))
             angle = angle - self.yaw
-            print(np.degrees(angle))
+            #print(np.degrees(angle))
             
             if angle > np.pi:
                 angle = angle - 2 * np.pi
@@ -743,7 +743,10 @@ class Occupy(Node):
             
             #Rotate towards the target        
             if abs(np.degrees(angle)) > 10 :
-                print(np.degrees(angle))
+
+
+
+
                 self.stopbot()
                 self.rotatebot(np.degrees(angle))    
             
