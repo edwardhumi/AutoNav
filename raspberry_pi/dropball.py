@@ -46,7 +46,7 @@ fd.start(0)
 
 GPIO.setup(servo_pin, GPIO.OUT)
 servo = GPIO.PWM(servo_pin,50)
-servo.start(5.5)
+servo.start(5.9)
 
 # GPIO.PWM(pin,freq)
 # to be used to control the servo
