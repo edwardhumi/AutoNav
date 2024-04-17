@@ -660,6 +660,7 @@ class Occupy(Node):
                             for point in path:
                                 realpath.append([point[0] * map_res + map_origin.y, point[1] * map_res + map_origin.x])
                             self.path = realpath[1:]
+                            self.targetReached = True
                             self.isCrashing = False
                             self.currentFrontier = self.path[-1]
                             #print('path' , self.path)
