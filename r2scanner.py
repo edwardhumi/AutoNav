@@ -17,7 +17,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 import numpy as np
-
+import time
 
 class Scanner(Node):
 
@@ -36,6 +36,11 @@ class Scanner(Node):
         # replace 0's with nan
         laser_range[laser_range==0] = np.nan
         # find index with minimum value
+        #print(laser_range)
+        for i in range(-30,31):
+            print(i,": ", laser_range[i])
+        time.sleep(1)
+        print("#############################")
         lr2i = np.nanargmin(laser_range)
 
         # log the info

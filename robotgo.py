@@ -39,7 +39,7 @@ threshold = 0.3
 proximity_limit = 0.25
 target_limit = 0.7
 rotatechange = 0.25
-stop_distance = 0.25
+stop_distance = 0.2
 front_angle = 35
 precission = 0.15
 angleChange = 10
@@ -743,10 +743,6 @@ class Occupy(Node):
             
             #Rotate towards the target        
             if abs(np.degrees(angle)) > 10 :
-
-
-
-
                 self.stopbot()
                 self.rotatebot(np.degrees(angle))    
             
