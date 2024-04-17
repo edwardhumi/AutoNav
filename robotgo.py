@@ -35,7 +35,7 @@ from std_msgs.msg import String
 # constants
 occ_bins = [-1, 0, 55, 100]
 map_bg_color = 1
-threshold = 10
+threshold = 0.3
 proximity_limit = 0.25
 target_limit = 0.7
 rotatechange = 0.25
@@ -64,7 +64,7 @@ def median(arr):
     return arr[ind]
 
 #Function to find frontiers
-def findfronteirs(tmap,posi):
+def findfronteirs(tmap,posi,map_res):
     frontiers = []
     markmap ={}
 
@@ -142,7 +142,7 @@ def findfronteirs(tmap,posi):
                 #Mark the original point as being checked
                 markmap[q] = 'Frontier-Close-List'
             #Adds the list of frontier points to the frontiers array
-            if len(nf) > threshold:
+            if len(nf) > round(threshold/map_res):
                 frontiers.append(nf)
             #Marking all points in the nf array as being closed by the map
             for i in nf:
@@ -394,7 +394,7 @@ class Occupy(Node):
         self.avoidingCrash = False #If the robot is avoiding a wall
         
         # signal to start the program
-        self.start_autonav = False
+        self.start_autonav = True
 
     #Callback to check the stage of the robot
     def stage_callback(self, msg):
@@ -434,7 +434,7 @@ class Occupy(Node):
 
     #Stops the robots
     def stopbot(self):
-        self.get_logger().info('In stopbot')
+        #self.get_logger().info('In stopbot')
         # publish to cmd_vel to move TurtleBot
         twist = Twist()
         twist.linear.x = 0.0
@@ -622,7 +622,7 @@ class Occupy(Node):
                     self.stopbot()
 
                     #Generates frontier positions
-                    frontier_positions = findfronteirs(odata,(grid_y,grid_x))
+                    frontier_positions = findfronteirs(odata,(grid_y,grid_x), map_res)
                     
                     #Adds the median of the frontiers to an array
                     midpoint_positions = []
@@ -643,7 +643,7 @@ class Occupy(Node):
                             test_target = midpoint_positions[i]   
                             
                             # Searches through the array for travellable frontiers
-                            a_star_list = (a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth, map_res))
+                            a_star_list = a_star((grid_y, grid_x), (test_target[0], test_target[1]), odata, iheight, iwidth, map_res)
                             if a_star_list:
                                 print(a_star_list)
                                 break
@@ -720,15 +720,20 @@ class Occupy(Node):
     def movetotarget(self, target):
         if target:
             #Locate relative yaw of the target
-            angle = np.arctan((target[0]-self.y)/(target[1]-self.x))-self.yaw
+            angle = np.arctan((target[0]-self.y)/(target[1]-self.x))
             if (target[1]-self.x) < 0:
                 if (target[0]-self.y) > 0:
                     angle += np.pi
                 else:
                     angle -= np.pi
+            angle = angle - self.yaw
+            if angle > np.pi:
+                angle = angle - 2 * np.pi
+            if angle < np.pi:
+                angle = angle + 2 * np.pi
             
             #Rotate towards the target        
-            if abs(np.degrees(angle)) > 10:
+            if abs(np.degrees(angle)) > 10 :
                 self.stopbot()
                 self.rotatebot(np.degrees(angle))    
             
