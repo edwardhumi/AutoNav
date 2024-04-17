@@ -237,7 +237,13 @@ class Mover(Node):
                     self.delay(0.5, "backward")
                     #self.direction = "right"
                     self.right()
-                    self.delay(4.4, "right")
+                    self.delay(2, "right")
+                    s1=  1-GPIO.input(ir1)
+                    s2 = 1-GPIO.input(ir2)
+                    while(s1 == 1 and s2 == 1):
+                        self.right()
+                        s1=  1-GPIO.input(ir1)
+                        s2 = 1-GPIO.input(ir2)
                     self.stage = "reverse"
     
                 if self.stage == "server":
