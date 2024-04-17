@@ -210,12 +210,48 @@ class Mover(Node):
         #if not  (self.direction == "leftForward" or self.direction == "rightForward"):
 
         if self.stage != "autonav":
+            if self.stage == "server" and not self.doneServer:
+                self.stop()
+
+            if self.stage == "server":
+                #assuming door 1 is on the left
+                if (self.door == "door1"):
+                    while s1==0 or s2 == 0:
+                        self.forward()
+                        s1 = 1-GPIO.input(ir1)
+                        s2 = 1-GPIO.input(ir2)
+                    while s2 == 1:
+                        self.left()
+                        s2 = 1-GPIO.input(ir2)
+                    while s2 ==0:
+                        self.left()
+                        s2 = 1-GPIO.input(ir2)
+                    self.doneServer = True
+                #if rpi received that door 2 is unlocked
+                elif (self.door == "door2"):
+                    while s1 == 0 or s2 == 0:
+                        self.forward()
+                        s1 = 1-GPIO.input(ir1)
+                        s2 = 1-GPIO.input(ir2)
+                    while s1 == 1:
+                        self.right()
+                        s1 = 1-GPIO.input(ir1)
+                    while s1 == 0:
+                        self.right()
+                        s1 = 1-GPIO.input(ir1)
+                    self.doneServer = True
+
+                if self.doneServer:
+                    self.stage = "door"
+
             if ((s1 == 0) and (s2 == 0)  and (self.direction == 'stop' or self.direction == "forward")):
                 if not self.stage == "server":
                     self.direction = "stop"
                     self.stop()
     
                 if self.stage == "navigation":
+                    self.stop()
+                    time.sleep(2)
                     self.stage = "server"
     
                 if self.stage == "door":
@@ -246,24 +282,6 @@ class Mover(Node):
                         s2 = 1-GPIO.input(ir2)
                     self.stage = "reverse"
     
-                if self.stage == "server":
-                    #assuming door 1 is on the left
-                    if (self.door == "door1"):
-                        time.sleep(2)
-                        self.left()
-                        self.delay(1.3, "left")
-                        self.forward()
-                        self.delay(0.2, "forward")
-                        self.doneServer = True
-                    #if rpi received that door 2 is unlocked
-                    elif (self.door == "door2"):
-                        time.sleep(2)
-                        self.right()
-                        self.delay(1.2, "right")
-                        self.forward()
-                        self.delay(0.1, "forward")
-                        self.doneServer = True
-    
             #follow black line, forward, right, left, stop
             else:
                 # line follower should not work in bucket adn autonav stage
@@ -285,9 +303,6 @@ class Mover(Node):
                         else:
                             self.direction = "stop"
                             self.stop()
-    
-                if self.stage == "server" and self.doneServer:
-                    self.stage = "door"
 
     def move(self):
         while (True):
