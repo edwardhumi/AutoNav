@@ -39,12 +39,12 @@ threshold = 10
 proximity_limit = 0.25
 target_limit = 0.7
 rotatechange = 0.25
-stop_distance = 0.3
+stop_distance = 0.25
 front_angle = 35
 precission = 0.15
 angleChange = 10
 testing = True
-wall_size = 0.1
+wall_size = 0.06
     
 #waitTime = 60
             
@@ -699,19 +699,19 @@ class Occupy(Node):
                     top = 2 * (-shift_y)
                     
                 # create new image
-                new_width = iwidth + right + left
-                new_height = iheight + top + bottom
-                img_transformed = Image.new(img.mode, (new_width, new_height), map_bg_color)
-                img_transformed.paste(img, (left, top))
+                #new_width = iwidth + right + left
+                #new_height = iheight + top + bottom
+                #img_transformed = Image.new(img.mode, (new_width, new_height), map_bg_color)
+                #img_transformed.paste(img, (left, top))
         
                 # rotate by 90 degrees so that the forward direction is at the top of the image
-                rotated = img_transformed.rotate(np.degrees(yaw)-90, expand=True, fillcolor=map_bg_color)
-                rotated.save('Map.png',cmap = 'gray',origin = 'lower')
+                #rotated = img_transformed.rotate(np.degrees(yaw)-90, expand=True, fillcolor=map_bg_color)
+                #rotated.save('Map.png',cmap = 'gray',origin = 'lower')
         
                 # show the image using grayscale map
-                # plt.imshow(img, cmap='gray', origin='lower')
+                plt.imshow(img, cmap='gray', origin='lower')
                 # plt.imshow(img_transformed, cmap='gray', origin='lower')
-                plt.imshow(rotated, cmap='gray', origin='lower')
+                #plt.imshow(rotated, cmap='gray', origin='lower')
                 plt.draw_all()
                 # pause to make sure the plot gets created
                 plt.pause(0.00000000001)

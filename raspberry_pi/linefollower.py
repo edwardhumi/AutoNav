@@ -109,61 +109,6 @@ class Mover(Node):
         self.get_logger().info('Received Door: "%s"' % msg.data)
         self.door = msg.data
         print("door num", msg.data)
-
-    def rotatebot(self, rot_angle):
-            # self.get_logger().info('In rotatebot')
-            # create Twist object
-            twist = Twist()
-    
-            # get current yaw angle
-            current_yaw = self.yaw
-            # log the info
-            self.get_logger().info('Current: %f' % math.degrees(current_yaw))
-            # we are going to use complex numbers to avoid problems when the angles go from
-            # 360 to 0, or from -180 to 180
-            c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-            # calculate desired yaw
-            target_yaw = current_yaw + math.radians(rot_angle)
-            # convert to complex notation
-            c_target_yaw = complex(math.cos(target_yaw),math.sin(target_yaw))
-            self.get_logger().info('Desired: %f' % math.degrees(cmath.phase(c_target_yaw)))
-            # divide the two complex numbers to get the change in direction
-            c_change = c_target_yaw / c_yaw
-            # get the sign of the imaginary component to figure out which way we have to turn
-            c_change_dir = np.sign(c_change.imag)
-            # set linear speed to zero so the TurtleBot rotates on the spot
-            twist.linear.x = 0.0
-            # set the direction to rotate
-            twist.angular.z = c_change_dir * speedchange * 2
-            # start rotation
-            print(twist.angular.z)
-            self.publisher_.publish(twist)
-            self.isRotating = True
-
-        # we will use the c_dir_diff variable to see if we can stop rotating
-            c_dir_diff = c_change_dir
-            # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-            # if the rotation direction was 1.0, then we will want to stop when the c_dir_diff
-            # becomes -1.0, and vice versa
-            while(c_change_dir * c_dir_diff > 0):
-                # allow the callback functions to run
-                rclpy.spin_once(self)
-                current_yaw = self.yaw
-                # convert the current yaw to complex form
-                c_yaw = complex(math.cos(current_yaw),math.sin(current_yaw))
-                self.get_logger().info('Current Yaw: %f' % math.degrees(current_yaw))
-                # get difference in angle between current and target
-                c_change = c_target_yaw / c_yaw
-                # get the sign to see if we can stop
-                c_dir_diff = np.sign(c_change.imag)
-                # self.get_logger().info('c_change_dir: %f c_dir_diff: %f' % (c_change_dir, c_dir_diff))
-
-            self.get_logger().info('End Yaw: %f' % math.degrees(current_yaw))
-            # set the rotation speed to 0
-            twist.angular.z = 0.0
-            # stop the rotation
-            self.publisher_.publish(twist)
-            self.isRotating = False
         
     def forward(self):
         twist = Twist()
@@ -264,78 +209,79 @@ class Mover(Node):
 
         #if not  (self.direction == "leftForward" or self.direction == "rightForward"):
 
-        if ((s1 == 0) and (s2 == 0)  and (self.direction == 'stop' or self.direction == "forward")):
-            if not self.stage == "server":
-                self.direction = "stop"
-                self.stop()
-
-            if self.stage == "navigation":
-                self.stage = "server"
-
-            if self.stage == "door":
-                self.stage = "bucket"
-
-            if self.stage == "reverse":
-                self.stage = "autonav"
-
-            if self.stage == "bucket":
-                msg = String()
-                msg.data = self.stage
-                self.publisher2_.publish(msg)
-                self.get_logger().info('Publishing Stage: "%s"' % msg.data)
-
-                time.sleep(5)
-                print("AAAAAAAAAAAA")
-                #self.direction = "backward"
-                self.backward()
-                self.delay(0.5, "backward")
-                #self.direction = "right"
-                self.right()
-                self.delay(4.4, "right")
-                self.stage = "reverse"
-
-            if self.stage == "server":
-                #assuming door 1 is on the left
-                if (self.door == "door1"):
-                    time.sleep(2)
-                    self.left()
-                    self.delay(1.3, "left")
-                    self.forward()
-                    self.delay(0.2, "forward")
-                    self.doneServer = True
-                #if rpi received that door 2 is unlocked
-                elif (self.door == "door2"):
-                    time.sleep(2)
+        if self.stage != "autonav":
+            if ((s1 == 0) and (s2 == 0)  and (self.direction == 'stop' or self.direction == "forward")):
+                if not self.stage == "server":
+                    self.direction = "stop"
+                    self.stop()
+    
+                if self.stage == "navigation":
+                    self.stage = "server"
+    
+                if self.stage == "door":
+                    self.stage = "bucket"
+    
+                if self.stage == "reverse":
+                    self.stage = "autonav"
+    
+                if self.stage == "bucket":
+                    msg = String()
+                    msg.data = self.stage
+                    self.publisher2_.publish(msg)
+                    self.get_logger().info('Publishing Stage: "%s"' % msg.data)
+    
+                    time.sleep(5)
+                    print("AAAAAAAAAAAA")
+                    #self.direction = "backward"
+                    self.backward()
+                    self.delay(0.5, "backward")
+                    #self.direction = "right"
                     self.right()
-                    self.delay(1.2, "right")
-                    self.forward()
-                    self.delay(0.1, "forward")
-                    self.doneServer = True
-
-        #follow black line, forward, right, left, stop
-        else:
-            # line follower should not work in bucket adn autonav stage
-            if self.stage != "bucket" and self.stage != "autonav":
-                # robot should move forward if not in reverse stage
-                #if self.stage != "reverse":
-                if True:
-                    #right
-                    if s2 == 1 and s1 == 0:
-                        self.direction = "right"
-                        self.right()
-                     #left
-                    elif s1 == 1 and s2 == 0:
-                        self.direction = "left"
-                        self.left() 
-                    elif s1 == 1 and s2 == 1:
-                        self.direction = "forward"
+                    self.delay(4.4, "right")
+                    self.stage = "reverse"
+    
+                if self.stage == "server":
+                    #assuming door 1 is on the left
+                    if (self.door == "door1"):
+                        time.sleep(2)
+                        self.left()
+                        self.delay(1.3, "left")
                         self.forward()
-                    else:
-                        self.direction = "stop"
-                        self.stop()
-
-            if self.stage == "server" and self.doneServer:
-                self.stage = "door"
+                        self.delay(0.2, "forward")
+                        self.doneServer = True
+                    #if rpi received that door 2 is unlocked
+                    elif (self.door == "door2"):
+                        time.sleep(2)
+                        self.right()
+                        self.delay(1.2, "right")
+                        self.forward()
+                        self.delay(0.1, "forward")
+                        self.doneServer = True
+    
+            #follow black line, forward, right, left, stop
+            else:
+                # line follower should not work in bucket adn autonav stage
+                if self.stage != "bucket" and self.stage != "autonav":
+                    # robot should move forward if not in reverse stage
+                    #if self.stage != "reverse":
+                    if True:
+                        #right
+                        if s2 == 1 and s1 == 0:
+                            self.direction = "right"
+                            self.right()
+                         #left
+                        elif s1 == 1 and s2 == 0:
+                            self.direction = "left"
+                            self.left() 
+                        elif s1 == 1 and s2 == 1:
+                            self.direction = "forward"
+                            self.forward()
+                        else:
+                            self.direction = "stop"
+                            self.stop()
+    
+                if self.stage == "server" and self.doneServer:
+                    self.stage = "door"
 
     def move(self):
         while (True):
