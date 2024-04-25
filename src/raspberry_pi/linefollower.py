@@ -83,6 +83,7 @@ class Mover(Node):
             10)
         # self.get_logger().info('Created subscriber')
         self.subscription  # prevent unused variable warning
+        
         # initialize variables
         self.roll = 0
         self.pitch = 0
@@ -116,54 +117,26 @@ class Mover(Node):
         twist.angular.z = 0.0
         # start movement
         self.publisher_.publish(twist)
-        #time.sleep(0.1)
-
+        
     def backward(self):
         twist = Twist()
         twist.linear.x = -1*speedchange
         twist.angular.x = 0.0
         self.publisher_.publish(twist)
-        print("mundur")
 
     def right(self):
         twist = Twist()
         twist.linear.x = 0.0
         twist.angular.z = -1*rotatechange
-        print('kanan')
         # start movement
         self.publisher_.publish(twist)
-        #time.sleep(0.5)
 
     def left(self):
         twist = Twist()
         twist.linear.x = 0.0
         twist.angular.z = rotatechange
         # start movement
-        print('kiri')
         self.publisher_.publish(twist)
-        #time.sleep(0.5)
-
-    def rightForward(self):
-        # rotate right then forward
-        twist = Twist()
-        #twist.linear.x += speedchange
-        #twist.angular.z -= rotatechange
-        # start movement
-        #self.publisher_.publish(twist)
-        self.forward()
-        time.sleep(1)
-        print("rightForward")
-
-    def leftForward(self):
-        # rotate left then forward
-        twist = Twist()
-        #twist.linear.x += speedchange
-        #twist.angular.z += rotatechange
-        # start movement
-        #self.publisher_.publish(twist)
-        self.forward()
-        time.sleep(1)
-        print("leftForward")
 
     def stop(self):
         twist = Twist()
@@ -201,7 +174,6 @@ class Mover(Node):
         s1=  1-GPIO.input(ir1)
         s2 = 1-GPIO.input(ir2)
 
-        print(s1,s2)
         #if linefollower doesn't detect black
         #(by right at the middle of the 2 doors)
         #it will stop 
@@ -267,7 +239,6 @@ class Mover(Node):
                     self.get_logger().info('Publishing Stage: "%s"' % msg.data)
     
                     time.sleep(5)
-                    print("AAAAAAAAAAAA")
                     #self.direction = "backward"
                     self.backward()
                     self.delay(0.5, "backward")
