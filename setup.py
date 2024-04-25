@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'r2run = auto_nav.src.autonav:main'
+            'autonav = auto_nav.src.autonav:main',
+            'astar = auto_nav.src.astar:main'
         ],
     },
 )
