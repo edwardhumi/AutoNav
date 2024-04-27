@@ -63,105 +63,112 @@ def median(arr):
     ind = round(len(arr)/2)
     return arr[ind]
 
-#Function to find frontiers
-def findfronteirs(tmap,posi,map_res):
+# Function to find frontiers
+def findfrontiers(odata,posi,map_res):
     frontiers = []
     markmap ={}
 
-    #Function to check if a position is a fronteir or not
-    def isFronteir(pos):
-        if tmap[pos[0],pos[1]]   == 2:
+    # check whether a position is a frontier
+    def isFrontier(pos):
+        if odata[pos[0],pos[1]] == 2:
             if pos[0] ==0:
-                temp = tmap[:2,:]
-            elif pos[0] == len(tmap)-1:
-                temp = tmap[pos[0]-1:,:]
+                temp = odata[:2,:]
+            elif pos[0] == len(odata)-1:
+                temp = odata[pos[0]-1:,:]
             else:
-                temp = tmap[pos[0]-1:pos[0]+2,:]
+                temp = odata[pos[0]-1:pos[0]+2,:]
 
             if pos[1] == 0:
                 a = temp[:,:2]
-            elif pos[1] == len(tmap[0])-1:
+            elif pos[1] == len(odata[0])-1:
                 a = temp[:,pos[1]-1:]
             else:
                 a = temp[:,pos[1]-1:pos[1]+2]
             return np.any(a==1)
         return False
     
-    #Function to check if a cell has been marked
+    # check if a cell has been marked
     def mark(p):
         return markmap.get(p,'Unmarked')
     
+    # get all adjacent cells
     def adj(p):
-        return Adj(p,tmap)
+        ans = []
+        for i in range(-1,2):
+            for j in range(-1,2):
+                if (i==0 and j ==0) or p[0]+i < 0 or p[1] + j < 0 or \
+                    p[1] + j > len(odata[0]) -1 or p[0]+i > len(odata) -1:
+                    continue
+                ans.append((p[0]+i,p[1]+j))
+        return ans
 
-    #Creating the map queue 
+    # create the map queue 
     qm = []
     
-    #Adding robot's current position to the map queue
+    # add robot's current position to the map queue
     qm.append(posi)
     markmap[posi] = "Map-Open-List"
 
     while qm:
-        #Dequeueing first element of map queue
+        # dequeue first element of map queue
         p = qm.pop(0)
 
-        #Skipping the element if it has already been mapped
+        # skip the element if it has already been mapped
         if mark(p) == 'Map-Close-List':
             continue
         
-        #Checking if the cell is a frontier
-        if isFronteir(p):
+        # check if the cell is a frontier
+        if isFrontier(p):
             
-            #Creating a queue for finding adjacent frontiers qf
-            #Creating a list of frontier points nf
-            
+            # queue for finding adjacent frontiers
             qf = []
+            # list of frontier points
             nf = []
             qf.append(p)
             
-            #Marking the point as to be opened by the frontier
+            # mark the point as to be opened by the frontier
             markmap[p] = "Frontier-Open-List"
 
             while qf:
-                #Dequeuing the first element of qf
                 q = qf.pop(0)
                 
-                #Skipping the cell if it's already been mapped or if it has been searched through 
+                # skip the cell if it's already been mapped or it has been searched 
                 if mark(q) in ["Map-Close-List","Frontier-Close-List"]:
                     continue
-                #If the point is a frontier, add it to the nf arrray
-                if isFronteir(q):
+                # if the point is a frontier, add it to the nf arrray
+                if isFrontier(q):
                     nf.append(q)
-                    #Check for cells adjacent to current frontier point
+                    # check for cells adjacent to current frontier point
                     for w in adj(q):
-                        #If there is a neighbor that has not been added to qf, and has not been mapped or checked add it to the queue
-                        if mark(w) not in ["Frontier-Open-List",'Frontier-Close-List','Map-Close-List']:
+                        # if there is a neighbor that has not been added to qf, 
+                        # and has not been mapped or checked add it to the queue
+                        if mark(w) not in ["Frontier-Open-List",'Frontier-Close-List',
+                                           'Map-Close-List']:
                             qf.append(w)
-                            #Mark the newly added cell as frontier open list
+                            # mark the newly added cell as frontier open list
                             markmap[w] = "Frontier-Open-List"
-                #Mark the original point as being checked
+                # mark the original point as being checked
                 markmap[q] = 'Frontier-Close-List'
-            #Adds the list of frontier points to the frontiers array
+            # add the list of frontier points to the frontiers array
             if len(nf) > round(threshold/map_res):
                 frontiers.append(nf)
-            #Marking all points in the nf array as being closed by the map
+            # mark all points in the nf array as being closed by the map
             for i in nf:
                 markmap[i] = "Map-Close-List"
-        #Generating neighbors for the cells in the map queue
+        # generate neighbors for the cells in the map queue
         for v in adj(p):
-            #Adding any neighbors that have not been opened or checked
+            # add any neighbors that have not been opened or checked
             if mark(v) not in ["Map-Open-List","Map-Close-List"]:
-                if any([tmap[x[0],x[1]] == 2 for x in adj(v)]):
+                if any([odata[x[0],x[1]] == 2 for x in adj(v)]):
                        qm.append(v)
                        markmap[v] = "Map-Open-List"
-        #Marking the point as checked in the map
+        # mark the point as checked in the map
         markmap[p] = "Map-Close-List"
-    #returning the final list of frontiers 
     return frontiers
     
 
 #Separate function to check if a point is a frontier or not, used in navigaiton
-def isFronteir(tmap,pos):
+def isFrontier(tmap,pos):
     if tmap[pos[0],pos[1]]   == 2:
         if pos[0] ==0:
             temp = tmap[:2,:]
@@ -589,7 +596,7 @@ class Occupy(Node):
                     #Checks if current frontier is stil a frontier
                     if self.currentFrontier:
                         print("Checking Fronteir")
-                        if not isFronteir(odata, (round((self.currentFrontier[0]-map_origin.y)/map_res),round((self.currentFrontier[1]-map_origin.x)/map_res))):
+                        if not isFrontier(odata, (round((self.currentFrontier[0]-map_origin.y)/map_res),round((self.currentFrontier[1]-map_origin.x)/map_res))):
                             #If frontier has already been mapped clear path, target and frontier
                             self.path = []
                             self.currentFrontier = []
@@ -627,7 +634,7 @@ class Occupy(Node):
                     self.stopbot()
 
                     #Generates frontier positions
-                    frontier_positions = findfronteirs(odata,(grid_y,grid_x), map_res)
+                    frontier_positions = findfrontiers(odata,(grid_y,grid_x), map_res)
                     
                     #Adds the median of the frontiers to an array
                     midpoint_positions = []
